@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>metyu · Durum</title>
+<style>
+:root{--bg:#f1f3f5;--card:#fff;--fg:#16202b;--mut:#5d6b78;--line:#dde2e7;--up:#2f7d57;--dn:#b8403a;--acc:#2f6aa8}
+@media(prefers-color-scheme:dark){:root{--bg:#12161b;--card:#1b2128;--fg:#e8edf2;--mut:#9aa7b3;--line:#2b333c;--up:#5fbf8d;--dn:#e5766f;--acc:#7fb2e6}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,sans-serif;padding:20px 16px 48px}
+main{max-width:640px;margin:0 auto;display:grid;gap:14px}
+h1{font-size:26px;margin:0}h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+.pill{display:inline-block;border:1.5px solid var(--acc);color:var(--acc);border-radius:999px;padding:2px 12px;font-size:12px;letter-spacing:.1em;font-weight:600}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.kv{background:var(--bg);border-radius:10px;padding:10px 12px}
+.kv small{color:var(--mut);display:block}.kv b{font:600 20px ui-monospace,Menlo,monospace}
+.up{color:var(--up)}.dn{color:var(--dn)}.mut{color:var(--mut)}
+.sym{border-top:1px solid var(--line);padding:10px 0}.sym:first-of-type{border-top:0}
+.row{display:flex;justify-content:space-between;gap:12px}.row span:last-child{text-align:right;font-family:ui-monospace,Menlo,monospace}
+.log{font:13px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-word;margin:0}
+.warn{border-color:var(--dn)}
+</style></head><body><main>
+<div><h1>metyu · Durum</h1><span class="pill">PAPER · SANAL PARA</span></div>
+<div class="card" id="ust"><span class="mut">Yükleniyor…</span></div>
+<div id="govde"></div>
+<p class="mut" style="font-size:13px;margin:0">Bu sayfa, GitHub'da kendi kendine çalışan sanal portföyün yaklaşık 30 dakikada bir kaydedilen durumunu gösterir; canlı değildir. Gerçek para, cüzdan veya borsa hesabı yok. Sayfa 5 dakikada bir kendini yeniler. <a href="../tam/" style="color:var(--acc)">Simülatöre git</a></p>
+</main><script>
+const URL_ = 'https://raw.githubusercontent.com/katozenc0-create/Metyu-sim/veri/';
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const para = (x) => x == null ? '–' : x.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const yuzde = (x) => x == null ? '–' : '%' + (x * 100).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const isaret = (x) => (x >= 0 ? '+' : '') + para(x);
+function ciz(d) {
+  const yas = Math.round((Date.now() - new Date(d.savedAt).getTime()) / 60000), p = d.portfolio;
+  const bayat = yas > 75;
+  document.getElementById('ust').className = 'card' + (bayat ? ' warn' : '');
+  document.getElementById('ust').innerHTML = '<div class="row"><span>Son kayıt</span><span>' + esc(new Date(d.savedAt).toLocaleString('tr-TR')) + ' · ' + yas + ' dk önce</span></div>' +
+    (bayat ? '<p class="dn" style="margin:8px 0 0">Kayıt eski: program şu an çalışmıyor olabilir ya da iki çalışma arasındaki boşluktayız (6 saatte bir yeniden başlar).</p>' : '') +
+    '<div class="row"><span>Fiyat kaynağı</span><span>' + esc(d.feed || '–') + '</span></div>' +
+    '<div class="row"><span>Mum · kaldıraç</span><span>' + esc(d.bar) + ' · ' + esc(d.lev) + 'x</span></div>';
+  let h = '<div class="card"><h2>Portföy</h2><div class="grid">' +
+    '<div class="kv"><small>Özkaynak</small><b>' + para(p.equity) + '</b></div>' +
+    '<div class="kv"><small>Toplam K/Z</small><b class="' + (p.pnl >= 0 ? 'up' : 'dn') + '">' + isaret(p.pnl) + '</b></div>' +
+    '<div class="kv"><small>Bugün</small><b class="' + (p.today >= 0 ? 'up' : 'dn') + '">' + yuzde(p.today) + '</b></div>' +
+    '<div class="kv"><small>Maks. düşüş</small><b>' + yuzde(p.maxDD) + '</b></div></div>' +
+    (p.halt ? '<p class="dn" style="margin:10px 0 0">Durdu: ' + esc(p.halt) + '</p>' : '') +
+    (d.counters && d.counters.errors ? '<p class="dn" style="margin:10px 0 0">Hata sayısı: ' + esc(d.counters.errors) + '</p>' : '') + '</div>';
+  h += '<div class="card" style="margin-top:14px"><h2>Semboller</h2>' + d.symbols.map((s) => {
+    const po = s.position;
+    return '<div class="sym"><div class="row"><b>' + esc(s.symbol) + '</b><span>' + para(s.price) + '</span></div>' +
+      '<div class="row mut"><span>Pozisyon</span><span class="' + (po ? (po.side === 'long' ? 'up' : 'dn') : '') + '">' + (po ? esc(po.side) + ' · giriş ' + para(po.entry) + ' · stop ' + para(po.stop) : 'yok') + '</span></div>' +
+      '<div class="row mut"><span>Hesap · işlem</span><span>' + para(s.equity) + ' · ' + esc(s.trades) + '</span></div>' +
+      '<div class="row mut"><span>Seçilen strateji</span><span>' + esc(s.model || 'yok (bekliyor)') + '</span></div>' +
+      (s.lastVeto ? '<div class="row mut"><span>Son engel</span><span>' + esc(typeof s.lastVeto === 'string' ? s.lastVeto : JSON.stringify(s.lastVeto)) + '</span></div>' : '') + '</div>';
+  }).join('') + '</div>';
+  h += '<div class="card" style="margin-top:14px"><h2>Son olaylar</h2><pre class="log">' + (d.recent && d.recent.length ? d.recent.slice().reverse().map(esc).join('\n') : 'Henüz olay yok.') + '</pre></div>';
+  document.getElementById('govde').innerHTML = h;
+}
+function yukle() {
+  fetch(URL_ + 'durum.json?t=' + Date.now(), { cache: 'no-store' }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(ciz)
+    .catch((e) => { if (!document.getElementById('govde').innerHTML) document.getElementById('ust').innerHTML = '<b>Henüz kayıt yok.</b><p class="mut" style="margin:6px 0 0">İlk kayıt, program başladıktan yaklaşık 5 dakika sonra oluşur. Biraz sonra sayfayı yenileyin. (' + esc(e.message) + ')</p>'; });
+}
+yukle(); setInterval(yukle, 5 * 60000);
+</script></body></html>

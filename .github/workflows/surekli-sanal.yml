@@ -32,9 +32,29 @@ jobs:
           else
             echo "Önceki durum yok; yeni sanal portföy başlayacak."
           fi
-      - name: Programı çalıştır (5,5 saat)
+      - name: Programı çalıştır (5,5 saat, 30 dakikada bir ara kayıt)
         run: |
-          METYU_DATA_DIR="$PWD/data" timeout --signal=TERM 335m node metyu-runner.mjs --port 0 > konsol.txt 2>&1 || true
+          export METYU_DATA_DIR="$PWD/data"
+          REMOTE="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          node metyu-runner.mjs --port 8787 > konsol.txt 2>&1 &
+          PID=$!
+          anlik() {
+            if curl -s -m 10 http://127.0.0.1:8787/json > durum.tmp && jq --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '. + {savedAt: $t}' durum.tmp > durum.json 2>/dev/null; then cp durum.json data/durum.json; fi
+            tail -n 200 konsol.txt > data/konsol-son.txt
+          }
+          yayinla() {
+            rm -rf yayin && mkdir yayin && cp -r data/. yayin/ && rm -f yayin/metyu.lock yayin/*.tmp
+            ( cd yayin && git init -q -b veri && git config user.name "github-actions" && git config user.email "github-actions@users.noreply.github.com" \
+              && git add -A && git commit -q -m "Ara kayıt $(date -u +%Y-%m-%d-%H%M)" && git push -q -f "$REMOTE" veri ) || echo "Ara kayıt gönderilemedi; sonraki denemede tekrar"
+          }
+          SON=$((SECONDS + 335 * 60)); DK=0
+          while [ $SECONDS -lt $SON ] && kill -0 $PID 2>/dev/null; do
+            sleep 60; DK=$((DK + 1))
+            if [ $DK -eq 5 ] || [ $((DK % 30)) -eq 0 ]; then anlik; yayinla; fi
+          done
+          anlik
+          kill -TERM $PID 2>/dev/null || true
+          wait $PID 2>/dev/null || true
           tail -n 200 konsol.txt > data/konsol-son.txt
       - name: Durumu veri dalına kaydet
         if: always()
