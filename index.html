@@ -376,30 +376,40 @@ function poller(job) {
 let feedIdx = 0, feedTimer = null, liveName = 'Binance';
 const diag = {};
 function note(name, msg) { if (!diag[name]) diag[name] = msg; }
-function gotLive(bid, ask, name) { everLive = true; liveName = name; onQuote(bid, ask, 'live'); }
+let attemptGot = false, lastGood = 0;
+function gotLive(bid, ask, name) {
+  everLive = true; attemptGot = true; liveName = name;
+  const i = FEEDS.findIndex(function (f) { return f.name === name; }); if (i >= 0) lastGood = i;
+  onQuote(bid, ask, 'live');
+}
 function connectLive(idx) {
   clearTimeout(wsRetry); clearTimeout(feedTimer);
   try { if (ws) { ws.onclose = null; ws.close(); } } catch (e) { /* ignore */ }
-  feedIdx = idx || 0;
-  if (feedIdx === 0) connectStart = Date.now();
+  feedIdx = idx || 0; attemptGot = false;
+  if (!everLive && feedIdx === 0) connectStart = Date.now();
   if (feedIdx >= FEEDS.length) return; // every feed failed: demo takes over
   try {
     ws = FEEDS[feedIdx].open();
     if (ws && 'name' in ws && ws.name === '') ws.name = FEEDS[feedIdx].name;
     const nm = FEEDS[feedIdx].name;
-    ws.onclose = function (e) { note(nm, 'bağlantı kapandı' + (e && e.code ? ' (kod ' + e.code + ')' : '')); if (everLive) wsRetry = setTimeout(function () { connectLive(0); }, 2000); };
+    ws.onclose = function (e) { note(nm, 'bağlantı kapandı' + (e && e.code ? ' (kod ' + e.code + ')' : '')); if (everLive) wsRetry = setTimeout(function () { connectLive(lastGood); }, 2000); };
     ws.onerror = function () { note(nm, 'bağlantı hatası'); };
   } catch (e) { note(FEEDS[feedIdx].name, 'açılamadı: ' + (e && e.name || 'hata')); ws = null; }
-  feedTimer = setTimeout(function () { if (!everLive) connectLive(feedIdx + 1); }, 3500);
+  feedTimer = setTimeout(function () {
+    if (attemptGot) return;
+    let next = feedIdx + 1;
+    if (next >= FEEDS.length && everLive) next = 0; // a feed that worked before: keep cycling instead of giving up
+    connectLive(next);
+  }, 3500);
 }
 // Self-heal: a live feed that went silent (phone slept, connection dropped) is reconnected from the first feed.
 let lastHeal = 0;
 setInterval(function () {
   if (!everLive || document.hidden || Date.now() - q.t < 8000 || Date.now() - lastHeal < 8000) return;
-  lastHeal = Date.now(); connectLive(0);
+  lastHeal = Date.now(); connectLive(lastGood);
 }, 2000);
 document.addEventListener('visibilitychange', function () {
-  if (!document.hidden && everLive && Date.now() - q.t >= 5000) { lastHeal = Date.now(); connectLive(0); }
+  if (!document.hidden && everLive && Date.now() - q.t >= 5000) { lastHeal = Date.now(); connectLive(lastGood); }
 });
 // Demo feed: random walk with slowly drifting trend; only runs when the live feed never connected.
 setInterval(function () {
