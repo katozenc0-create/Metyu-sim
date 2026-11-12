@@ -69,6 +69,12 @@ button.ghost { color: var(--muted); }
 .posbox { display: grid; gap: 6px; font: 400 13px/1.4 var(--font-num); font-variant-numeric: tabular-nums; }
 .posbox div { display: flex; justify-content: space-between; gap: 12px; }
 .posbox span:first-child { color: var(--muted); font-family: var(--font-ui); }
+.lg { width: 100%; border-collapse: collapse; font-size: 12px; }
+.lg th { text-align: right; font-weight: 500; color: var(--muted); padding: 4px 4px; font-size: 11px; letter-spacing: .03em; }
+.lg th:first-child, .lg td:first-child { text-align: left; }
+.lg td { text-align: right; padding: 7px 4px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lg td:first-child { white-space: normal; }
+.lg td.pos { color: var(--buy, #2e7d4f); } .lg td.neg { color: var(--sell, #b3402e); }
 .log { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 260px; overflow-y: auto; font-size: 13px; }
 .log li { display: flex; gap: 10px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .log time { font: 400 12px var(--font-num); color: var(--muted); flex: none; }
@@ -103,6 +109,12 @@ button.ghost { color: var(--muted); }
       <section class="panel">
         <h2>Pozisyon</h2>
         <div id="pos" class="posbox"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Strateji karşılaştırması</h2>
+        <div style="overflow-x:auto"><table class="lg" id="leagueT"></table></div>
+        <p class="note" style="margin:10px 0 0">Üç strateji aynı gerçek fiyatı izler, her biri kendi 10.000 sanal hesabıyla ve yukarıdaki kaldıraç ile işlem yapar. Sizin elle verdiğiniz emirlerden bağımsızdır. Birkaç işlem bir sonuç sayılmaz; saatlerce izle.</p>
       </section>
 
       <section class="panel">
@@ -292,7 +304,9 @@ const SAVE_KEY = 'metyu_sim_v1';
 function saveState() {
   try {
     const a = Object.assign({}, acct, { events: acct.events.slice(-40) });
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ acct: a, strat: $('strat').value, sym: sym }));
+    const lg = {};
+    Object.keys(league).forEach(function (k) { lg[k] = { acct: Object.assign({}, league[k].acct, { events: league[k].acct.events.slice(-10) }), st: league[k].st, blocked: league[k].blocked }; });
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ acct: a, strat: $('strat').value, sym: sym, league: lg }));
   } catch (e) { /* storage unavailable: the page works without it */ }
 }
 function loadState() {
@@ -303,6 +317,18 @@ function loadState() {
   } catch (e) { return null; }
 }
 const saved = loadState();
+const LEAGUE_NAMES = { sma: 'SMA kesişimi', momentum: 'Kırılım', meanrev: 'Ort. dönüş' };
+function newLeague() {
+  const l = {};
+  Object.keys(LEAGUE_NAMES).forEach(function (k) { l[k] = { acct: makeAccount(), st: { cur: null }, blocked: null }; });
+  return l;
+}
+function validLeague(l) {
+  return l && Object.keys(LEAGUE_NAMES).every(function (k) {
+    return l[k] && l[k].acct && typeof l[k].acct.cash === 'number' && Array.isArray(l[k].acct.closed) && l[k].st;
+  });
+}
+let league = saved && validLeague(saved.league) ? saved.league : newLeague();
 let acct = saved ? saved.acct : makeAccount();
 let sym = 'BTCUSDT', src = 'connecting', everLive = false, connectStart = Date.now();
 let ws = null, wsRetry = null;
@@ -319,6 +345,7 @@ function clock(t) { return new Date(t).toLocaleTimeString('tr-TR', { hour12: fal
 function setSource(s) {
   if (s === src) return;
   if (acct.pos && q.bid != null) closePos(acct, acct.pos.side === 'long' ? q.bid : q.ask, 'KAYNAK DEĞİŞTİ');
+  resetLeaguePositions('KAYNAK DEĞİŞTİ');
   src = s; series = []; closes = []; blocked = null;
   log(acct, 'Veri kaynağı: ' + (s === 'live' ? 'canlı ' + liveName + ' akışı' : 'demo akış (gerçek fiyat değil)'));
 }
@@ -330,6 +357,10 @@ function onQuote(bid, ask, source) {
   if (series.length > 240) series.shift();
   const ev = onTick(acct, bid, ask);
   if (ev && acct.events.length) blocked = lastSide || blocked;
+  Object.keys(league).forEach(function (k) {
+    const L = league[k], side = L.acct.pos && L.acct.pos.side;
+    if (onTick(L.acct, bid, ask) && side) L.blocked = side;
+  });
   render();
 }
 let lastSide = null;
@@ -430,6 +461,7 @@ function barStep() {
   if (!fresh()) return;
   closes.push((q.bid + q.ask) / 2);
   if (closes.length > 400) closes.shift();
+  leagueStep();
   if (!$('auto').checked) { render(); return; }
   const sg = signalFor($('strat').value, stState, closes);
   if (blocked && sg.side !== blocked) blocked = null;
@@ -441,6 +473,46 @@ function barStep() {
     } catch (e) { /* refused by risk rules */ }
   }
   render();
+}
+function leagueStep() {
+  Object.keys(league).forEach(function (k) {
+    const L = league[k], a = L.acct, sg = signalFor(k, L.st, closes);
+    if (L.blocked && sg.side !== L.blocked) L.blocked = null;
+    if (a.pos && sg.side !== a.pos.side) closePos(a, a.pos.side === 'long' ? q.bid : q.ask, 'Sinyal ile');
+    if (!a.pos && sg.side && sg.side !== L.blocked && !a.halt) {
+      try { openPos(a, sg.side, sg.side === 'long' ? q.ask : q.bid, sg.stop, +$('lev').value); } catch (e) { /* refused by risk rules */ }
+    }
+  });
+}
+function resetLeaguePositions(label) {
+  Object.keys(league).forEach(function (k) {
+    const L = league[k];
+    if (L.acct.pos && q.bid != null) closePos(L.acct, L.acct.pos.side === 'long' ? q.bid : q.ask, label);
+    L.st = { cur: null }; L.blocked = null;
+  });
+}
+function renderLeague() {
+  const t = $('leagueT'); if (!t) return;
+  t.textContent = '';
+  const head = document.createElement('tr');
+  ['Strateji', 'Hesap', 'K/Z', 'İşl.', 'Kaz.', 'KF'].forEach(function (h) { const c = document.createElement('th'); c.textContent = h; head.appendChild(c); });
+  t.appendChild(head);
+  Object.keys(league).sort(function (x, y) { return equity(league[y].acct) - equity(league[x].acct); }).forEach(function (k) {
+    const a = league[k].acct, e = equity(a), pnl = (e / a.start - 1) * 100;
+    const wins = a.closed.filter(function (v) { return v > 0; }), gw = wins.reduce(function (s, v) { return s + v; }, 0);
+    const gl = -a.closed.filter(function (v) { return v <= 0; }).reduce(function (s, v) { return s + v; }, 0);
+    const row = document.createElement('tr');
+    [LEAGUE_NAMES[k], e.toFixed(2), (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + '%', String(a.closed.length),
+     a.closed.length ? Math.round(wins.length / a.closed.length * 100) + '%' : '–',
+     !a.closed.length ? '–' : gl > 0 ? (gw / gl).toFixed(2) : (gw > 0 ? '∞' : '0.00'),
+     ].forEach(function (v, i) {
+      const c = document.createElement('td'); c.textContent = v;
+      if (i === 0) { const st = document.createElement('small'); st.style.cssText = 'display:block;color:var(--muted);font-size:11px'; st.textContent = a.halt ? 'durdu' : a.pos ? (a.pos.side === 'long' ? 'AL açık' : 'SAT açık') : 'bekliyor'; c.appendChild(st); }
+      if (i === 2) c.className = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : '';
+      row.appendChild(c);
+    });
+    t.appendChild(row);
+  });
 }
 function restartBars() { clearInterval(barTimer); barTimer = setInterval(barStep, +$('bar').value * 1000); }
 
@@ -487,6 +559,7 @@ function drawChart() {
 }
 
 function render() {
+  renderLeague();
   const e = equity(acct), pnl = e - acct.start;
   $('eq').textContent = money(e);
   $('pnl').textContent = signed(pnl) + ' (' + (pnl / acct.start * 100).toFixed(2) + '%)';
@@ -543,6 +616,7 @@ function render() {
 $('sym').addEventListener('change', function () {
   sym = $('sym').value;
   if (acct.pos && q.bid != null) closePos(acct, acct.pos.side === 'long' ? q.bid : q.ask, 'SEMBOL DEĞİŞTİ');
+  resetLeaguePositions('SEMBOL DEĞİŞTİ');
   everLive = false; src = 'connecting'; q = { bid: null, ask: null, t: 0 }; series = []; closes = []; blocked = null;
   demoMid = BASE[sym]; demoDrift = 0; connectLive(); render();
 });
@@ -556,7 +630,7 @@ $('bClose').addEventListener('click', function () {
   if (!acct.pos) { $('err').textContent = 'Kapatılacak pozisyon yok.'; return; }
   closePos(acct, fillPrice(acct.pos.side, true), 'Elle'); render();
 });
-$('bReset').addEventListener('click', function () { acct = makeAccount(); blocked = null; stState = { cur: null }; $('err').textContent = ''; saveState(); render(); });
+$('bReset').addEventListener('click', function () { acct = makeAccount(); league = newLeague(); blocked = null; stState = { cur: null }; $('err').textContent = ''; saveState(); render(); });
 $('strat').addEventListener('change', function () { stState = { cur: null }; blocked = null; saveState(); render(); });
 window.addEventListener('resize', drawChart);
 setInterval(render, 1000);
