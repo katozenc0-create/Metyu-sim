@@ -1,0 +1,2158 @@
+<!DOCTYPE html>
+<html lang="tr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>metyu</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@600&display=swap">
+<style>
+/* Layout: one-column trading console on phones; chart + account side by side from 820px.
+   Palette: teal-biased slate ground, one cool accent, semantic up/down/warn kept separate. */
+:root {
+  --bg: #0e1316; --surface: #151c20; --surface2: #1b252a; --fg: #e6edef; --muted: #8a9aa1;
+  --line: #26343a; --up: #3ecf8e; --down: #ff6b6b; --accent: #5cc8ff; --warn: #f2b84b; --c4: #b48cff; --c5: #ff8fb1; --c6: #5ee0d0;
+  --font-ui: "IBM Plex Sans", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, monospace;
+  --font-head: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f3f6f7; --surface: #ffffff; --surface2: #eaf0f2; --fg: #12202a; --muted: #5b6c75;
+    --line: #d6e0e4; --up: #0f8a5f; --down: #c93a3a; --accent: #0a6ea8; --warn: #a86a00; --c4: #7048c8; --c5: #c23d75; --c6: #0d8577;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f3f6f7; --surface: #ffffff; --surface2: #eaf0f2; --fg: #12202a; --muted: #5b6c75;
+  --line: #d6e0e4; --up: #0f8a5f; --down: #c93a3a; --accent: #0a6ea8; --warn: #a86a00; --c4: #7048c8; --c5: #c23d75; --c6: #0d8577;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font-ui);
+  padding-block: 16px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 14px; }
+h1 { font: 600 22px/1 var(--font-head); letter-spacing: .01em; margin: 0; }
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { font: 500 11px/1 var(--font-ui); letter-spacing: .06em; text-transform: uppercase; padding: 6px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: var(--surface); }
+.pill.paper { color: var(--accent); border-color: var(--accent); }
+.pill.live { color: var(--up); border-color: var(--up); }
+.pill.demo, .pill.stale { color: var(--warn); border-color: var(--warn); }
+.pill.off { color: var(--down); border-color: var(--down); }
+.grid { display: grid; gap: 14px; grid-template-columns: 1fr; }
+/* Phones: the two columns dissolve so the panels can be reordered: chart, controls, position, account, log.
+   From 820px: two columns again, in source order. */
+.col { display: contents; }
+.o-chart { order: 1; } .o-ctrl { order: 2; } .o-learn { order: 3; } .o-mkt { order: 4; } .o-pos { order: 5; } .o-acct { order: 6; } .o-cmp { order: 7; } .o-bt { order: 8; } .o-log { order: 9; }
+@media (min-width: 820px) {
+  .grid { grid-template-columns: 1.55fr 1fr; align-items: start; }
+  .col { display: grid; gap: 14px; min-width: 0; align-content: start; }
+  .col > .panel { order: 0; }
+}
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.panel h2 { font: 500 11px/1 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
+.quote { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; margin-bottom: 10px; }
+.mid { font: 500 30px/1 var(--font-num); font-variant-numeric: tabular-nums; }
+.ba { font: 400 12px/1.4 var(--font-num); color: var(--muted); font-variant-numeric: tabular-nums; }
+canvas { width: 100%; height: 220px; display: block; border-radius: 6px; background: var(--surface2); }
+canvas#eqChart { height: 110px; margin-top: 10px; }
+canvas#ind { height: 90px; margin-top: 4px; }
+canvas[hidden] { display: none; }
+.reading span:last-child { text-align: right; font-family: var(--font-ui); }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile { background: var(--surface2); border-radius: 8px; padding: 10px; min-width: 0; }
+.tile .k { font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+.tile .v { font: 500 17px/1.3 var(--font-num); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tile .v .sub { display: block; font-size: 12px; white-space: nowrap; }
+.up { color: var(--up); } .down { color: var(--down); } .warn { color: var(--warn); }
+.controls { display: grid; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+label { font-size: 12px; color: var(--muted); display: grid; gap: 4px; min-width: 0; }
+select, input[type=range] { font: 14px var(--font-ui); color: var(--fg); background: var(--surface2); border: 1px solid var(--line); border-radius: 6px; padding: 8px; min-width: 0; }
+input[type=range] { padding: 0; width: 100%; accent-color: var(--accent); }
+button { font: 500 14px var(--font-ui); border-radius: 8px; border: 1px solid var(--line); background: var(--surface2); color: var(--fg); padding: 11px 14px; cursor: pointer; flex: 1 1 0; min-width: 84px; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.buy { border-color: var(--up); color: var(--up); }
+button.sell { border-color: var(--down); color: var(--down); }
+button.ghost { color: var(--muted); }
+.switch { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--fg); }
+.switch input { width: 20px; height: 20px; accent-color: var(--accent); }
+.posbox { display: grid; gap: 6px; font: 400 13px/1.4 var(--font-num); font-variant-numeric: tabular-nums; }
+.posbox div { display: flex; justify-content: space-between; gap: 12px; }
+.posbox span:first-child { color: var(--muted); font-family: var(--font-ui); }
+.log { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 260px; overflow-y: auto; font-size: 13px; }
+.log li { display: flex; gap: 10px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.log time { font: 400 12px var(--font-num); color: var(--muted); flex: none; }
+.cmp { width: 100%; border-collapse: collapse; font: 400 13px/1.35 var(--font-num); font-variant-numeric: tabular-nums; }
+.cmp th { font: 500 11px var(--font-ui); color: var(--muted); text-align: right; padding: 0 0 6px 8px; }
+.cmp th:first-child, .cmp td:first-child { text-align: left; padding-left: 0; font-family: var(--font-ui); }
+.cmp td { text-align: right; padding: 7px 0 7px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+.cmp td small { display: block; font-size: 11px; color: var(--muted); }
+.cmp tr.sel td:first-child { color: var(--accent); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+canvas#btChart { height: 180px; margin-top: 8px; }
+.controls > * { min-width: 0; }
+.tblwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+@media (max-width: 480px) { .cmp { font-size: 12px; } .cmp td { padding-left: 6px; } }
+.cmp td small { white-space: nowrap; }
+.cmp.wrapsm td small { white-space: normal; }
+.cmp.wrapsm td:first-child { width: 42%; }
+.note { font-size: 12px; color: var(--muted); max-width: 70ch; }
+.err { color: var(--down); font-size: 13px; min-height: 18px; }
+@media (prefers-reduced-motion: no-preference) { button { transition: border-color .15s, background .15s; } }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>metyu</h1>
+    <div class="pills">
+      <span class="pill paper">Paper · sanal para</span>
+      <span class="pill" id="feedPill">Bağlanıyor</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="col">
+      <section class="panel o-chart">
+        <div class="quote">
+          <label for="sym" style="display:block">
+            <select id="sym"><option>BTCUSDT</option><option>ETHUSDT</option><option>SOLUSDT</option></select>
+          </label>
+          <span class="mid" id="mid">–</span>
+          <span class="ba" id="ba">alış – / satış –</span>
+        </div>
+        <canvas id="chart" role="img" aria-label="Mum grafiği: son 60 bar, seçili stratejinin göstergeleri, giriş ve stop seviyeleri"></canvas>
+        <p class="note" id="indLabel" style="margin:8px 0 0" hidden></p>
+        <canvas id="ind" role="img" aria-label="Gösterge paneli: RSI ya da MACD" hidden></canvas>
+        <h2 style="margin:14px 0 8px">Grafik okuma</h2>
+        <div id="reading" class="posbox reading"></div>
+        <p class="note" style="margin:8px 0 0">Göstergeler geçmiş fiyattan hesaplanır; nereye gidileceğini değil, şu anki durumu özetler.</p>
+        <p class="note" id="srcNote" style="margin:10px 0 0"></p>
+      </section>
+
+      <section class="panel o-pos">
+        <h2>Pozisyon</h2>
+        <div id="pos" class="posbox"></div>
+      </section>
+
+      <section class="panel o-log">
+        <h2>İşlem günlüğü</h2>
+        <ul class="log" id="log"></ul>
+        <div class="row" style="margin-top:10px">
+          <button class="ghost" id="bCsv" style="flex:none">İşlemleri kopyala (CSV)</button>
+          <span class="note" id="csvMsg" role="status"></span>
+        </div>
+        <textarea id="csvBox" readonly hidden aria-label="CSV işlem listesi" style="width:100%;height:140px;margin-top:8px;font:12px var(--font-num);background:var(--surface2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px"></textarea>
+      </section>
+
+      <section class="panel o-bt controls">
+        <h2>Geçmiş veride test (backtest)</h2>
+        <p class="note" style="margin:0">Seçili sembolün geçmiş mumlarıyla altı strateji aynı ücret, kayma, fonlama ve risk kurallarıyla test edilir. Kaldıraç, Kontrol'deki ayardan alınır.</p>
+        <div class="row">
+          <label for="btTf" style="flex:1 1 110px">Mum süresi
+            <select id="btTf"><option value="1m">1 dk</option><option value="5m">5 dk</option><option value="15m" selected>15 dk</option><option value="1h">1 saat</option><option value="4h">4 saat</option></select></label>
+          <label for="btN" style="flex:1 1 110px">Mum sayısı
+            <select id="btN"><option value="500">500</option><option value="1000">1.000</option><option value="3000" selected>3.000</option><option value="5000">5.000</option></select></label>
+        </div>
+        <button id="btRun" class="buy" style="flex:none">Testi çalıştır</button>
+        <p class="note" id="btStatus" role="status" style="margin:0"></p>
+        <div id="btOut" hidden>
+          <div class="tblwrap"><table class="cmp">
+            <thead><tr><th scope="col">Strateji</th><th scope="col">K/Z</th><th scope="col">İşlem</th><th scope="col">Kazanma</th><th scope="col">Maks. düşüş</th></tr></thead>
+            <tbody id="btBody"></tbody>
+          </table></div>
+          <div class="legend" id="btLegend"></div>
+          <canvas id="btChart" role="img" aria-label="Backtest özkaynak eğrileri: altı strateji ve al-tut"></canvas>
+          <p class="note" id="btNote" style="margin:10px 0 0"></p>
+        </div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel o-acct">
+        <h2>Hesap (10.000 USDT sanal)</h2>
+        <div class="tiles">
+          <div class="tile"><div class="k">Özkaynak</div><div class="v" id="eq">–</div></div>
+          <div class="tile"><div class="k">Toplam K/Z</div><div class="v" id="pnl">–</div></div>
+          <div class="tile"><div class="k">Maks. düşüş</div><div class="v" id="dd">–</div></div>
+          <div class="tile"><div class="k">İşlem sayısı</div><div class="v" id="cnt">0</div></div>
+          <div class="tile"><div class="k">Kazanma oranı</div><div class="v" id="wr">–</div></div>
+          <div class="tile"><div class="k">Kâr faktörü</div><div class="v" id="pf">–</div></div>
+        </div>
+        <canvas id="eqChart" role="img" aria-label="Özkaynak eğrisi: başlangıç bakiyesine göre hesabın seyri"></canvas>
+        <p class="warn" id="halt" style="margin:10px 0 0;font-size:13px" hidden></p>
+      </section>
+
+      <section class="panel controls o-ctrl">
+        <h2>Kontrol</h2>
+        <label for="strat" style="display:block;margin:0 0 8px">Strateji <select id="strat"><option value="sma">SMA kesişimi (trend)</option><option value="momentum">Kırılım (momentum)</option><option value="meanrev">Ortalamaya dönüş</option><option value="macd">MACD (momentum)</option><option value="rsi">RSI geri çekilme + üst zaman dilimi trendi</option><option value="sr">Destek/direnç kırılımı</option></select></label>
+        <div class="switch"><input type="checkbox" id="auto" checked><label for="auto" style="color:var(--fg);font-size:14px">Ajan otomatik işlem yapsın</label></div>
+        <p class="note" id="agentNote" style="margin:0"></p>
+        <p class="note" id="health" style="margin:0;font-family:var(--font-num);font-size:11.5px"></p>
+        <div class="switch"><input type="checkbox" id="wake"><label for="wake" style="color:var(--fg);font-size:14px">Ekranı açık tut</label></div>
+        <p class="note" id="wakeNote" style="margin:0">Telefon kilitlenince ya da sekme arka plana geçince tarayıcı sayfayı durdurur; o arada ajan işlem yapamaz ve stoplar izlenemez.</p>
+        <div class="row">
+          <label for="lev" style="flex:1 1 140px">Kaldıraç: <b id="levV" style="color:var(--fg)">3x</b>
+            <input type="range" id="lev" min="1" max="5" step="1" value="3"></label>
+          <label for="bar" style="flex:1 1 110px">Bar süresi
+            <select id="bar"><option value="2">2 sn</option><option value="5">5 sn</option><option value="15">15 sn</option><option value="60">1 dk</option><option value="300">5 dk</option><option value="900" selected>15 dk</option><option value="3600">1 saat</option><option value="14400">4 saat</option></select></label>
+          <label for="stopPct" style="flex:1 1 110px">Elle stop
+            <select id="stopPct"><option value="0.005">%0,5</option><option value="0.01" selected>%1</option><option value="0.02">%2</option></select></label>
+        </div>
+        <div class="row">
+          <button class="buy" id="bLong">AL (long)</button>
+          <button class="sell" id="bShort">SAT (short)</button>
+          <button id="bClose">Kapat</button>
+        </div>
+        <div class="err" id="err" role="status"></div>
+        <button class="ghost" id="bReset" style="flex:none">Hesabı sıfırla</button>
+      </section>
+
+      <section class="panel o-mkt">
+        <h2>Piyasa verileri</h2>
+        <div id="mkt" class="posbox reading"></div>
+        <h2 style="margin:14px 0 8px">Büyük işlemler (balina)</h2>
+        <ul class="log" id="whales" style="max-height:180px"></ul>
+        <p class="note" id="mktNote" style="margin:8px 0 0"></p>
+      </section>
+
+      <section class="panel o-learn controls">
+        <h2>Öğrenen ajan</h2>
+        <p class="note" style="margin:0">Geçmiş veriyi kayan dilimlere böler: her dilimde ayarları seçer, sonraki ve hiç görmediği dilimde dener. Yalnızca görmediği veride de kazandıran strateji kullanılır; hiçbiri geçemezse ajan yeni işlem açmaz, bekler.</p>
+        <div class="row">
+          <label for="lnTf" style="flex:1 1 110px">Zaman dilimi
+            <select id="lnTf"><option value="1m">1 dk</option><option value="5m">5 dk</option><option value="15m">15 dk</option><option value="1h">1 saat</option><option value="4h" selected>4 saat</option></select></label>
+          <label for="lnN" style="flex:1 1 110px">Geçmiş
+            <select id="lnN"><option value="3000">3.000 mum</option><option value="5000" selected>5.000 mum</option></select></label>
+        </div>
+        <button id="lnRun" class="buy" style="flex:none">Öğren</button>
+        <p class="note" id="lnStatus" role="status" style="margin:0"></p>
+        <div id="lnOut" hidden>
+          <div class="tblwrap"><table class="cmp wrapsm">
+            <thead><tr><th scope="col">Strateji ve öğrenilen ayar</th><th scope="col">Görmediği veride</th><th scope="col">Varsayılan ayarla</th></tr></thead>
+            <tbody id="lnBody"></tbody>
+          </table></div>
+          <p class="note" id="lnVerdict" style="margin:10px 0 0"></p>
+        </div>
+        <div class="switch"><input type="checkbox" id="lnUse" disabled><label for="lnUse" style="color:var(--fg);font-size:14px">Ajan öğrenilen modeli kullansın</label></div>
+        <div class="switch"><input type="checkbox" id="lnAuto" checked><label for="lnAuto" style="color:var(--fg);font-size:14px">Kendini güncel tut</label></div>
+        <p class="note" id="lnModel" style="margin:0"></p>
+      </section>
+
+      <section class="panel o-cmp">
+        <h2>Strateji karşılaştırması</h2>
+        <div class="tblwrap"><table class="cmp">
+          <thead><tr><th scope="col">Strateji</th><th scope="col">K/Z</th><th scope="col">İşlem</th><th scope="col">Kazanma</th><th scope="col">Maks. düşüş</th></tr></thead>
+          <tbody id="cmpBody"></tbody>
+        </table></div>
+        <p class="note" id="cmpNote" style="margin:10px 0 0"></p>
+      </section>
+    </div>
+  </div>
+
+  <p class="note">Gerçek para, cüzdan veya borsa hesabı yok; emirler yalnızca bu sayfada simüle edilir. Alışlar satış fiyatından (ask), satışlar alış fiyatından (bid) dolar; ücret %0,05. Kayma en az %0,02'dir ve emir, canlı emir defterinde büyüklüğüne göre yürütülerek artar; backtest'te geçmiş defter olmadığından ölçülen ±%1 derinlikle tahmin edilir ve stoplara ek %0,03 eklenir. Açık pozisyonda borsanın canlı fonlama oranı işler (pozitifse long öder, negatifse short öder; alınamazsa %0,01 / 8 saat varsayılır). Emir defteri derinliği modellenmedi, büyük emirlerde gerçek sonuç daha kötü olabilir. Pozisyon boyutu, stop'ta kaybı hesabın %1'iyle sınırlar; gün içinde %3 zararda ajan o günün sonuna kadar durur (gün, yerel saatle gece yarısı yenilenir); hesap zirvesinden %15 düşüşte ise açık pozisyon kapanır ve hesabı sıfırlayana kadar yeni işlem açılmaz.</p>
+</div>
+
+<script>
+(function () {
+'use strict';
+// ENGINE-START
+const HARD_MAX_LEV = 10;
+// Turkish number format: 1.234,56
+function num(n, d) { return n.toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function makeAccount(o) {
+  o = o || {};
+  const b = o.balance != null ? o.balance : 10000;
+  return { start: b, cash: b, risk: o.risk != null ? o.risk : 0.01, maxLev: Math.min(o.maxLev != null ? o.maxLev : 5, HARD_MAX_LEV),
+    fee: 0.0005, slip: 0.0002, mmr: 0.005, fund: o.fund != null ? o.fund : 0.0001, dayLimit: o.dayLimit != null ? o.dayLimit : 0.03,
+    ddLimit: o.ddLimit != null ? o.ddLimit : 0.15,
+    pos: null, last: null, halt: null, history: [], eqHist: [], dayStart: b, day: dayKey(Date.now()), events: [], peak: b, maxDD: 0, trades: 0, closed: [] };
+}
+const DAY_HALT = 'günlük zarar limiti';
+function dayKey(t) { const d = new Date(t); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+// New calendar day (local time): the daily-loss baseline moves to current equity and a daily halt is lifted.
+// The drawdown halt is not lifted; it stays until the account is reset.
+function rollDay(a) {
+  const k = dayKey(clockOf(a));
+  if (a.day === k) return;
+  a.day = k; a.dayStart = equity(a);
+  if (a.halt === DAY_HALT) { a.halt = null; log(a, 'Yeni gün: günlük zarar limiti sıfırlandı'); }
+}
+// Engine clock: real time, or a.clock when replaying history (backtest sets it to each bar's time).
+function clockOf(a) { return a.clock != null ? a.clock : Date.now(); }
+// Events and trade history are capped in memory (the newest are kept) so an account can run for months.
+function log(a, msg) { a.events.push({ t: clockOf(a), msg: msg }); if (a.events.length > 600) a.events.splice(0, a.events.length - 300); }
+// One row per finished trade, for the CSV export.
+function record(a, p, exit, pnl, reason, slOut) {
+  if (!a.history) a.history = [];
+  if (a.history.length >= 5000) a.history.splice(0, 1000);
+  a.history.push({ side: p.side, tOpen: p.tOpen || null, tClose: clockOf(a), entry: p.entry, exit: exit, stop: p.stop,
+    qty: p.qty0 || p.qty, lev: p.lev, costs: p.costs0 != null ? p.costs0 : p.costs, funding: p.funding || 0, pnl: pnl, reason: reason, src: p.src || '',
+    slipIn: p.slipIn || 0, slipOut: slOut || 0, strat: p.strat || '', partial: !!p.tpDone });
+}
+function unreal(a) {
+  const p = a.pos, L = a.last != null ? a.last : p.entry;
+  return p.side === 'long' ? p.qty * (L - p.entry) : p.qty * (p.entry - L);
+}
+function equity(a) { return a.cash + (a.pos ? a.pos.margin + unreal(a) : 0); }
+function track(a) {
+  const e = equity(a);
+  a.peak = Math.max(a.peak, e);
+  a.maxDD = Math.max(a.maxDD, (a.peak - e) / a.peak);
+}
+function checkDaily(a) {
+  rollDay(a);
+  if (a.halt) return;
+  const e = equity(a);
+  if (a.peak > 0 && (a.peak - e) / a.peak >= a.ddLimit) {
+    a.halt = 'maksimum düşüş limiti';
+    log(a, 'DURDURULDU: hesap zirveden %' + num(a.ddLimit * 100, 0) + ' düştü');
+    if (a.pos) closePos(a, a.last, 'KİLİT ile');
+    return;
+  }
+  if ((e - a.dayStart) / a.dayStart <= -a.dayLimit) {
+    a.halt = DAY_HALT;
+    log(a, 'DURDURULDU: günlük zarar limiti aşıldı');
+  }
+}
+// Slippage for a market order of `qty` at `price`, as a fraction of price, on top of the bid/ask the fill already
+// uses: a.slip is a floor for latency and timing; on top of it comes the cost of walking the order book.
+//  - a.book (live): a recent order book snapshot { bids: [[px, qty]...], asks: [...] } — walked level by level.
+//  - a.depthUsd (backtests, or when there is no book): USD resting within 1% of the price on one side, assumed spread
+//    evenly over that band, so a fill eating N USD moves the average price by about 0.5% × N / depthUsd.
+// takerSide: 'buy' or 'sell'.
+function slipFor(a, takerSide, qty, price) {
+  let impact = 0;
+  const book = a.book && (takerSide === 'buy' ? a.book.asks : a.book.bids);
+  if (book && book.length) {
+    const best = book[0][0]; let left = qty, cost = 0, filled = 0;
+    for (let i = 0; i < book.length && left > 0; i++) { const take = Math.min(left, book[i][1]); cost += take * book[i][0]; filled += take; left -= take; }
+    const vwap = cost / filled, edge = Math.abs(vwap / best - 1);
+    impact = left > 0 ? edge * qty / filled + 0.001 * left / qty : edge; // beyond the visible book: extrapolate, plus a penalty
+  } else if (a.depthUsd > 0) impact = 0.005 * qty * price / a.depthUsd;
+  return a.slip + impact;
+}
+// pm (optional): position management — { act, dist } trailing stop, { tp, frac } partial take-profit; see manage().
+function openPos(a, side, entry, stop, lev, pm) {
+  if (a.halt) throw new Error('İşlem durduruldu: ' + a.halt);
+  if (a.pos) throw new Error('Zaten açık bir pozisyon var');
+  if (!(lev >= 1 && lev <= a.maxLev)) throw new Error('Kaldıraç izin verilen aralığın dışında');
+  if (side === 'long' ? stop >= entry : stop <= entry) throw new Error('Stop, giriş fiyatının zarar tarafında olmalı');
+  const liq = side === 'long' ? entry * (1 - 1 / lev + a.mmr) : entry * (1 + 1 / lev - a.mmr);
+  if (side === 'long' ? stop <= liq : stop >= liq) throw new Error('Stop likidasyon fiyatının ötesinde; kaldıracı düşür');
+  const c = a.fee + a.slip;
+  const perUnit = Math.abs(entry - stop) + (entry + stop) * c;
+  let qty = equity(a) * a.risk / perUnit;
+  let margin = qty * entry / lev, costs = qty * entry * c;
+  if (margin + costs > a.cash) { qty = a.cash / (entry / lev + entry * c); margin = qty * entry / lev; costs = qty * entry * c; }
+  // Actual slippage for this size; if it pushes the total past the cash, shrink the order to fit.
+  let sl = slipFor(a, side === 'long' ? 'buy' : 'sell', qty, entry);
+  costs = qty * entry * (a.fee + sl);
+  if (margin + costs > a.cash) { qty *= a.cash / (margin + costs); sl = slipFor(a, side === 'long' ? 'buy' : 'sell', qty, entry); margin = qty * entry / lev; costs = qty * entry * (a.fee + sl); }
+  if (!(qty > 0)) throw new Error('Sanal bakiye yetersiz');
+  a.cash -= margin + costs;
+  a.pos = { side: side, qty: qty, entry: entry, stop: stop, lev: lev, margin: margin, liq: liq, costs: costs, slipIn: sl, funding: 0, fundT: clockOf(a), tOpen: clockOf(a),
+    pm: pm || null, r0: Math.abs(entry - stop), best: entry, stop0: stop, partialPnl: 0, qty0: qty, costs0: costs };
+  a.last = entry;
+  a.trades++;
+  log(a, (side === 'long' ? 'AL' : 'SAT') + ' açıldı ' + num(entry, 4) + ' · ' + lev + 'x · stop ' + num(stop, 4));
+  track(a);
+}
+function closePos(a, price, reason) {
+  const p = a.pos;
+  const gross = p.side === 'long' ? p.qty * (price - p.entry) : p.qty * (p.entry - price);
+  // Stop exits pay a.stopSlip on top (set in backtests, where the fill is placed exactly at the stop level).
+  const slOut = slipFor(a, p.side === 'long' ? 'sell' : 'buy', p.qty, price) + (reason === 'STOP' ? (a.stopSlip || 0) : 0);
+  const exitCosts = p.qty * price * (a.fee + slOut);
+  const returned = Math.max(0, p.margin + gross - exitCosts);
+  a.cash += returned;
+  // p.margin has already been reduced (or raised) by funding; p.funding is the net amount paid.
+  const pnl = returned - (p.margin + (p.funding || 0)) - p.costs + (p.partialPnl || 0);
+  a.pos = null;
+  a.last = price;
+  a.closed.push(pnl);
+  record(a, p, price, pnl, reason, slOut);
+  log(a, reason + ' kapandı ' + num(price, 4) + ' · K/Z ' + (pnl >= 0 ? '+' : '') + num(pnl, 2) + (Math.abs(p.funding || 0) >= 0.005 ? ' (fonlama ' + (p.funding > 0 ? '-' : '+') + num(Math.abs(p.funding), 2) + ' dahil)' : '') + (p.tpDone ? ' (kısmi kâr dahil)' : ''));
+  track(a); checkDaily(a);
+  return pnl;
+}
+// Funding, perp-style: a rate per 8 hours on position value, accrued continuously. a.fund is the current rate
+// (live: the exchange's; history: the rate in force at each candle). Positive: longs pay shorts; negative: the reverse.
+// It is taken from / added to the margin.
+const FUND_PERIOD = 8 * 3600 * 1000;
+function accrueFunding(a, mark, now) {
+  const p = a.pos;
+  if (!p || !a.fund) return; // a.fund < 0: shorts pay, longs receive
+  const t = now != null ? now : clockOf(a), last = p.fundT != null ? p.fundT : t;
+  p.fundT = t;
+  if (!(t > last)) return;
+  let paid = p.qty * mark * a.fund * (t - last) / FUND_PERIOD * (p.side === 'long' ? 1 : -1);
+  if (paid > p.margin) paid = p.margin;
+  p.margin -= paid; p.funding = (p.funding || 0) + paid;
+}
+// Feed one quote. Longs are marked at the bid, shorts at the ask. Returns 'STOP', 'LIQ' or null.
+// Position management, in units of R = the initial risk (|entry − first stop|):
+//  trailing { act, dist }: once the price has gone act·R in favour, the stop follows the best price at dist·R
+//    behind it (it only ever tightens).
+//  partial  { tp, frac }: at tp·R in favour, close frac of the position once. The banked profit stays part of the
+//    same trade (one trade in the statistics, with the total result).
+function manage(a, mark) {
+  const p = a.pos, pm = p && p.pm;
+  if (!pm || !(p.r0 > 0)) return;
+  const long = p.side === 'long', gain = (long ? mark - p.entry : p.entry - mark) / p.r0;
+  p.best = long ? Math.max(p.best, mark) : Math.min(p.best, mark);
+  if (pm.act && (long ? p.best - p.entry : p.entry - p.best) >= pm.act * p.r0) {
+    const ns = long ? p.best - pm.dist * p.r0 : p.best + pm.dist * p.r0;
+    if (long ? ns > p.stop : ns < p.stop) { p.stop = ns; if (!p.trailing) { p.trailing = true; log(a, 'Takip eden stop devrede: ' + num(ns, 4)); } }
+  }
+  if (pm.tp && !p.tpDone && gain >= pm.tp) partialClose(a, mark, pm.frac || 0.5);
+}
+function partialClose(a, price, frac) {
+  const p = a.pos, q = p.qty * frac;
+  const gross = p.side === 'long' ? q * (price - p.entry) : q * (p.entry - price);
+  const sl = slipFor(a, p.side === 'long' ? 'sell' : 'buy', q, price);
+  const m = p.margin * frac, cst = p.costs * frac, fnd = (p.funding || 0) * frac;
+  const returned = Math.max(0, m + gross - q * price * (a.fee + sl));
+  a.cash += returned;
+  p.partialPnl = (p.partialPnl || 0) + returned - (m + fnd) - cst;
+  p.qty -= q; p.margin -= m; p.costs -= cst; p.funding = (p.funding || 0) - fnd; p.tpDone = true;
+  log(a, 'Kısmi kâr: %' + num(frac * 100, 0) + ' kapandı ' + num(price, 4) + ' · K/Z +' + num(returned - (m + fnd) - cst, 2));
+}
+function onTick(a, bid, ask, now) {
+  const p = a.pos;
+  const mark = p ? (p.side === 'long' ? bid : ask) : (bid + ask) / 2;
+  a.last = mark;
+  let ev = null;
+  if (p) {
+    accrueFunding(a, mark, now);
+    manage(a, mark);
+    const long = p.side === 'long';
+    if (p.margin <= 0 || (long && mark <= p.liq) || (!long && mark >= p.liq)) {
+      const lost = -(p.margin + (p.funding || 0) + p.costs) + (p.partialPnl || 0);
+      a.closed.push(lost);
+      record(a, p, mark, lost, 'LİKİDASYON');
+      a.pos = null; ev = 'LIQ';
+      log(a, 'LİKİDASYON ' + num(mark, 4) + ' · teminat kayboldu');
+    } else if ((long && mark <= p.stop) || (!long && mark >= p.stop)) {
+      closePos(a, mark, p.trailing ? 'TAKİP STOP' : 'STOP'); ev = 'STOP';
+    }
+  }
+  track(a); checkDaily(a);
+  return ev;
+}
+function signal(closes, fastN, slowN, volN, mult) {
+  if (closes.length < Math.max(slowN, volN + 1)) return { side: null, stop: null };
+  const avg = function (n) { let s = 0; for (let i = closes.length - n; i < closes.length; i++) s += closes[i]; return s / n; };
+  const f = avg(fastN), s = avg(slowN);
+  let vol = 0;
+  for (let i = closes.length - volN; i < closes.length; i++) vol += Math.abs(closes[i] - closes[i - 1]);
+  vol /= volN;
+  const last = closes[closes.length - 1];
+  if (!(vol > 0)) return { side: null, stop: null };
+  if (f > s) { const st = last - mult * vol; return st > 0 ? { side: 'long', stop: st } : { side: null, stop: null }; }
+  if (f < s) return { side: 'short', stop: last + mult * vol };
+  return { side: null, stop: null };
+}
+// Breakout and mean-reversion rules, ported from strategy.py. `st` carries their state (`cur`).
+function volOf(closes, n) { let v = 0; for (let i = closes.length - n; i < closes.length; i++) v += Math.abs(closes[i] - closes[i - 1]); return v / n; }
+function stopFor(side, last, vol, mult) {
+  if (!(vol > 0)) return { side: null, stop: null };
+  if (side === 'long') { const st = last - mult * vol; return st > 0 ? { side: 'long', stop: st } : { side: null, stop: null }; }
+  return { side: 'short', stop: last + mult * vol };
+}
+// Default settings of each strategy. The learning agent (walk-forward) picks among PARAM_GRID; these stay the
+// defaults everywhere else, so behaviour without a learned model is unchanged.
+const DEFAULTS = {
+  sma: { fast: 5, slow: 20, mult: 2 },
+  momentum: { L: 20, mult: 2 },
+  meanrev: { L: 20, z: 2, mult: 3 },
+  macd: { f: 12, s: 26, g: 9, mult: 2 },
+  rsi: { lo: 40, mult: 2 },
+  sr: { k: 3, buf: 0.25, mult: 2 }
+};
+// Deliberately small grids: fewer choices means less room to fit noise.
+const PARAM_GRID = {
+  sma: [{ fast: 5, slow: 20 }, { fast: 10, slow: 30 }, { fast: 20, slow: 50 }].flatMap(function (x) { return [2, 3].map(function (m) { return Object.assign({ mult: m }, x); }); }),
+  momentum: [20, 40, 55].flatMap(function (L) { return [2, 3].map(function (m) { return { L: L, mult: m }; }); }),
+  meanrev: [{ L: 20, z: 2 }, { L: 20, z: 2.5 }, { L: 40, z: 2 }].flatMap(function (x) { return [2, 3].map(function (m) { return Object.assign({ mult: m }, x); }); }),
+  macd: [{ f: 12, s: 26, g: 9 }, { f: 8, s: 21, g: 5 }, { f: 19, s: 39, g: 9 }].flatMap(function (x) { return [2, 3].map(function (m) { return Object.assign({ mult: m }, x); }); }),
+  rsi: [40, 35, 30].flatMap(function (lo) { return [2, 3].map(function (m) { return { lo: lo, mult: m }; }); }),
+  sr: [{ k: 3, buf: 0.25 }, { k: 5, buf: 0.25 }, { k: 3, buf: 0.5 }].flatMap(function (x) { return [2, 3].map(function (m) { return Object.assign({ mult: m }, x); }); })
+};
+function paramsFor(name, prm) { return Object.assign({}, DEFAULTS[name] || {}, prm || {}); }
+// Bars a strategy needs before it may trade, for its settings.
+function warmFor(name, prm) {
+  if (name === 'ens') return Math.max.apply(null, ((prm && prm.members) || []).map(function (m) { return warmFor(m.name, m.prm); }).concat([21]));
+  const P = paramsFor(name, prm);
+  if (name === 'sma') return Math.max(P.slow, 15) + 1;
+  if (name === 'momentum') return Math.max(P.L, 14) + 1;
+  if (name === 'meanrev') return Math.max(P.L, 15) + 1;
+  if (name === 'macd') return P.s + P.g + 5;
+  if (name === 'rsi') return 85;
+  if (name === 'sr') return Math.max(30, 4 * P.k + 18);
+  return 21;
+}
+// Short names for the voting description.
+const SHORT_NAME = { sma: 'SMA', momentum: 'Kırılım', meanrev: 'Ort. dönüş', macd: 'MACD', rsi: 'RSI', sr: 'Destek/direnç' };
+function describeParams(name, prm) {
+  if (name === 'ens') return 'çoğunluk oyu: ' + ((prm && prm.members) || []).map(function (m) { return SHORT_NAME[m.name] + ' (' + describeParams(m.name, m.prm) + ')'; }).join(' + ');
+  const P = paramsFor(name, prm), d = function (n) { return num(n, n % 1 ? 2 : 0); };
+  if (name === 'sma') return 'SMA ' + P.fast + '/' + P.slow + ', stop ' + d(P.mult) + 'x';
+  if (name === 'momentum') return P.L + ' bar kırılım, stop ' + d(P.mult) + 'x';
+  if (name === 'meanrev') return P.L + ' bar, z ' + d(P.z) + ', stop ' + d(P.mult) + 'x';
+  if (name === 'macd') return 'MACD ' + P.f + '/' + P.s + '/' + P.g + ', stop ' + d(P.mult) + 'x ATR';
+  if (name === 'rsi') return 'RSI ' + P.lo + '/' + (100 - P.lo) + ', stop ' + d(P.mult) + 'x ATR';
+  if (name === 'sr') return 'dönüş ' + P.k + ' bar, tampon ' + d(P.buf) + ' ATR, stop ' + d(P.mult) + 'x ATR';
+  return '';
+}
+function signalFor(name, st, closes, bars, prm) {
+  if (name === 'ens') return voteSignal(st, closes, bars, prm);
+  const P = paramsFor(name, prm), none = { side: null, stop: null };
+  if (name === 'macd' || name === 'rsi' || name === 'sr') {
+    if (closes.length < warmFor(name, P)) return none;
+    const B = bars && bars.length === closes.length ? bars : flatBars(tail(closes, 200));
+    const last = closes[closes.length - 1], atr = atrOf(B, 14) || volOf(closes, 14);
+    if (name === 'macd') {
+      // Momentum: follow the side of the MACD histogram (MACD line above / below its signal line).
+      const m = macdOf(closes, P.f, P.s, P.g);
+      if (!m || m.hist === 0) return none;
+      return stopFor(m.hist > 0 ? 'long' : 'short', last, atr, P.mult);
+    }
+    if (name === 'rsi') {
+      // Pullback in the higher-timeframe trend: buy an RSI dip in an uptrend, sell an RSI pop in a downtrend.
+      // Exits when RSI reaches the other side (+5) or the trend turns.
+      const tr = htfTrend(closes), r = rsiOf(closes, 14), hi = 100 - P.lo;
+      if (!tr || r == null) return none;
+      if (st.cur === 'long' && (r > hi + 5 || tr !== 'up')) st.cur = null;
+      if (st.cur === 'short' && (r < P.lo - 5 || tr !== 'down')) st.cur = null;
+      if (!st.cur) { if (tr === 'up' && r < P.lo) st.cur = 'long'; else if (tr === 'down' && r > hi) st.cur = 'short'; }
+      return st.cur ? stopFor(st.cur, last, atr, P.mult) : none;
+    }
+    // sr: close beyond the latest confirmed swing high (resistance) or swing low (support), by a buffer of ATR.
+    const pv = pivotsOf(tail(B, 130), P.k, 120);
+    if (pv.res && last > pv.res.p + P.buf * atr) st.cur = 'long';
+    else if (pv.sup && last < pv.sup.p - P.buf * atr) st.cur = 'short';
+    return st.cur ? stopFor(st.cur, last, atr, P.mult) : none;
+  }
+  if (name === 'momentum') {
+    const L = P.L, V = 14;
+    if (closes.length < Math.max(L + 1, V + 1)) return none;
+    const prev = closes.slice(-L - 1, -1), last = closes[closes.length - 1];
+    if (last > Math.max.apply(null, prev)) st.cur = 'long'; else if (last < Math.min.apply(null, prev)) st.cur = 'short';
+    return st.cur ? stopFor(st.cur, last, volOf(closes, V), P.mult) : none;
+  }
+  if (name === 'meanrev') {
+    const L = P.L, V = 14, ENTRY = P.z, EXIT = 0.5;
+    if (closes.length < Math.max(L, V + 1)) return none;
+    const w = closes.slice(-L), last = closes[closes.length - 1];
+    const mean = w.reduce(function (a, b) { return a + b; }, 0) / L;
+    const sd = Math.sqrt(w.reduce(function (a, c) { return a + (c - mean) * (c - mean); }, 0) / L);
+    if (!(sd > 0)) { st.cur = null; return none; }
+    const z = (last - mean) / sd;
+    if (z <= -ENTRY) st.cur = 'long'; else if (z >= ENTRY) st.cur = 'short'; else if (Math.abs(z) <= EXIT) st.cur = null;
+    return st.cur ? stopFor(st.cur, last, volOf(closes, V), P.mult) : none;
+  }
+  return signal(closes, P.fast, P.slow, 14, P.mult);
+}
+// Voting: each member strategy (with its own settings and state) gives a side; a side wins with a strict majority of
+// the members (2 of 2, 2 of 3). The stop is the average of the agreeing members' stops. No majority: no position.
+function voteSignal(st, closes, bars, prm) {
+  const members = (prm && prm.members) || [], none = { side: null, stop: null };
+  if (members.length < 2) return none;
+  if (!st.subs || st.subs.length !== members.length) st.subs = members.map(function () { return { cur: null }; });
+  const sigs = members.map(function (m, i) { return signalFor(m.name, st.subs[i], closes, bars, m.prm); });
+  const need = Math.floor(members.length / 2) + 1;
+  for (const side of ['long', 'short']) {
+    const agree = sigs.filter(function (x) { return x.side === side && x.stop > 0; });
+    if (agree.length >= need) return { side: side, stop: agree.reduce(function (a, x) { return a + x.stop; }, 0) / agree.length, votes: agree.length + '/' + members.length };
+  }
+  return none;
+}
+// ---------- Indicators. All work on the tail of the series, so cost stays flat as history grows. ----------
+function tail(v, n) { return v.length > n ? v.slice(-n) : v; }
+function emaSeries(v, n) {
+  const k = 2 / (n + 1), out = new Array(v.length);
+  let e = v[0];
+  for (let i = 0; i < v.length; i++) { e = i ? v[i] * k + e * (1 - k) : v[0]; out[i] = e; }
+  return out;
+}
+// RSI, Wilder smoothing.
+function rsiOf(v, n) {
+  n = n || 14;
+  const w = tail(v, n * 8 + 1);
+  if (w.length < n + 1) return null;
+  let g = 0, l = 0;
+  for (let i = 1; i <= n; i++) { const d = w[i] - w[i - 1]; if (d > 0) g += d; else l -= d; }
+  g /= n; l /= n;
+  for (let i = n + 1; i < w.length; i++) { const d = w[i] - w[i - 1]; g = (g * (n - 1) + Math.max(d, 0)) / n; l = (l * (n - 1) + Math.max(-d, 0)) / n; }
+  if (l === 0) return g === 0 ? 50 : 100;
+  return 100 - 100 / (1 + g / l);
+}
+// MACD, default 12/26/9.
+function macdOf(v, f, sl, g) {
+  f = f || 12; sl = sl || 26; g = g || 9;
+  const w = tail(v, 300);
+  if (w.length < sl + g) return null;
+  const ef = emaSeries(w, f), es = emaSeries(w, sl), m = w.map(function (_, i) { return ef[i] - es[i]; });
+  const sig = emaSeries(m.slice(sl - 1), g), L = m.length - 1;
+  return { macd: m[L], signal: sig[sig.length - 1], hist: m[L] - sig[sig.length - 1], prevHist: m[L - 1] - sig[sig.length - 2] };
+}
+// Bollinger 20/2.
+function bollOf(v, n, mult) {
+  n = n || 20; mult = mult || 2;
+  if (v.length < n) return null;
+  const w = tail(v, n), mid = w.reduce(function (a, b) { return a + b; }, 0) / n;
+  const sd = Math.sqrt(w.reduce(function (a, c) { return a + (c - mid) * (c - mid); }, 0) / n), last = v[v.length - 1];
+  return { mid: mid, up: mid + mult * sd, lo: mid - mult * sd, sd: sd, z: sd > 0 ? (last - mid) / sd : 0, width: mid > 0 ? 2 * mult * sd / mid : 0 };
+}
+// ATR (simple average of true range). Bars are {o,h,l,c}.
+function atrOf(B, n) {
+  n = n || 14;
+  if (B.length < n + 1) return null;
+  let s = 0;
+  for (let i = B.length - n; i < B.length; i++) {
+    const b = B[i], pc = B[i - 1].c;
+    s += Math.max(b.h - b.l, Math.abs(b.h - pc), Math.abs(b.l - pc));
+  }
+  return s / n;
+}
+// Swing points: a high (low) higher (lower) than the k bars on each side. Only confirmed ones (k bars after them).
+function pivotsOf(B, k, look) {
+  k = k || 3; look = look || 120;
+  const from = Math.max(k, B.length - look), highs = [], lows = [];
+  for (let i = from; i < B.length - k; i++) {
+    let hi = true, lo = true;
+    for (let j = 1; j <= k; j++) {
+      if (!(B[i].h >= B[i - j].h && B[i].h > B[i + j].h)) hi = false;
+      if (!(B[i].l <= B[i - j].l && B[i].l < B[i + j].l)) lo = false;
+    }
+    if (hi) highs.push({ i: i, p: B[i].h });
+    if (lo) lows.push({ i: i, p: B[i].l });
+  }
+  return { highs: highs, lows: lows, res: highs.length ? highs[highs.length - 1] : null, sup: lows.length ? lows[lows.length - 1] : null };
+}
+// Higher timeframe: every f-th close counting back from the latest (a rolling f-times-longer bar).
+function htfCloses(v, f) { const out = []; for (let i = v.length - 1; i >= 0; i -= f) out.unshift(v[i]); return out; }
+function flatBars(v) { return v.map(function (c) { return { o: c, h: c, l: c, c: c }; }); }
+// Trend of the higher timeframe (4x the bar length): close above / below its EMA 20.
+function htfTrend(v) {
+  const h = htfCloses(v, 4);
+  if (h.length < 21) return null;
+  const e = emaSeries(tail(h, 80), 20);
+  return h[h.length - 1] > e[e.length - 1] ? 'up' : 'down';
+}
+// Position-management variants the learner tests (none = exit only by signal or the initial stop).
+const PM_SETS = [null, { act: 1, dist: 1.5 }, { act: 1.5, dist: 1 }, { tp: 1.5, frac: 0.5 }, { act: 1, dist: 1.5, tp: 2, frac: 0.5 }];
+function pmKey(pm) { return pm ? ['a' + (pm.act || 0), 'd' + (pm.dist || 0), 't' + (pm.tp || 0), 'f' + (pm.frac || 0)].join('') : '-'; }
+function pmLabel(pm) {
+  if (!pm) return 'pozisyon yönetimi yok';
+  const parts = [];
+  if (pm.act) parts.push('takip stop (' + num(pm.act, 1) + 'R sonra ' + num(pm.dist, 1) + 'R geriden)');
+  if (pm.tp) parts.push('kısmi kâr (%' + num((pm.frac || 0.5) * 100, 0) + ' @ ' + num(pm.tp, 1) + 'R)');
+  return parts.join(' + ');
+}
+// ---------- Market-condition filters ----------
+// Contrarian crowding checks, applied only when opening a position:
+//  funding: don't go long when longs are paying a lot (crowded), nor short when shorts are.
+//  fng (Fear & Greed index 0–100): don't go long in extreme greed, nor short in extreme fear.
+// Missing data never blocks. Whether a filter is used at all is decided by the learner on unseen data.
+const FILTER = { fundHi: 0.0005, fundLo: -0.0003, fngHi: 80, fngLo: 20 };
+const FILTER_SETS = [{}, { funding: true }, { fng: true }, { funding: true, fng: true }];
+function filterKey(fl) { return ((fl && fl.funding ? 'F' : '') + (fl && fl.fng ? 'G' : '')) || '-'; }
+function filterLabel(fl) {
+  const k = filterKey(fl);
+  return k === '-' ? 'filtresiz' : k === 'F' ? 'fonlama filtresi' : k === 'G' ? 'korku-açgözlülük filtresi' : 'fonlama + korku-açgözlülük filtresi';
+}
+function filterBlocks(side, fl, ctx) {
+  if (!fl || !side || !ctx) return null;
+  if (fl.funding && ctx.funding != null) {
+    if (side === 'long' && ctx.funding >= FILTER.fundHi) return 'fonlama yüksek, longlar kalabalık';
+    if (side === 'short' && ctx.funding <= FILTER.fundLo) return 'fonlama negatif, shortlar kalabalık';
+  }
+  if (fl.fng && ctx.fng != null) {
+    if (side === 'long' && ctx.fng >= FILTER.fngHi) return 'aşırı açgözlülük';
+    if (side === 'short' && ctx.fng <= FILTER.fngLo) return 'aşırı korku';
+  }
+  return null;
+}
+// ENGINE-END
+
+const $ = function (id) { return document.getElementById(id); };
+const BASE = { BTCUSDT: 100000, ETHUSDT: 4000, SOLUSDT: 200 };
+const SAVE_KEY = 'metyu_sim_v1';
+function saveState() {
+  try {
+    const a = Object.assign({}, acct, { book: null, events: acct.events.slice(-40), history: (acct.history || []).slice(-500), eqHist: (acct.eqHist || []).slice(-EQ_MAX) });
+    const sh = {};
+    STRATS.forEach(function (k) {
+      const x = shadows[k];
+      sh[k] = { a: Object.assign({}, x.a, { book: null, events: [], history: [], eqHist: [] }), st: x.st, blocked: x.blocked, lastSide: x.lastSide };
+    });
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ acct: a, strat: $('strat').value, sym: sym, demoMid: demoMid, barLen: $('bar').value,
+      // Bars and the comparison only make sense on the source they were built from; restore checks that.
+      bars: src === 'connecting' ? (saved && saved.bars) || null : { closes: closes, ohlc: bars, bar: $('bar').value, src: src, venue: liveName, t: Date.now(), st: stState, blocked: blocked, lastSide: lastSide },
+      cmp: { shadows: sh, since: shadowSince } }));
+  } catch (e) { /* storage unavailable: the page works without it */ }
+}
+let stateBroken = false;
+function loadState() {
+  let raw = null;
+  try { raw = localStorage.getItem(SAVE_KEY); } catch (e) { return null; }
+  try {
+    const d = JSON.parse(raw || 'null');
+    if (!d || !d.acct || typeof d.acct.cash !== 'number' || !Array.isArray(d.acct.closed)) throw new Error('eksik');
+    return d;
+  } catch (e) {
+    // Unreadable save: keep a copy under another key before the page starts a fresh account over it.
+    if (raw) { try { localStorage.setItem(SAVE_KEY + '_bozuk', raw); } catch (e2) { /* ignore */ } stateBroken = true; }
+    return null;
+  }
+}
+const saved = loadState();
+let acct = saved ? saved.acct : makeAccount();
+let sym = 'BTCUSDT', src = 'connecting', everLive = false, connectStart = Date.now();
+let ws = null, wsRetry = null;
+let q = { bid: null, ask: null, t: 0 };
+let series = [], closes = [], bars = [], curBar = null, blocked = null, barTimer = null;
+// barTick[j] = absolute tick number at which closes[j] was taken, so bar-based lines can be drawn on the tick chart.
+let tickN = 0, barTick = [];
+function resetBars() { closes = []; bars = []; curBar = null; barTick = []; blocked = null; stState = { cur: null }; resetShadows(); pending = null; }
+// Saved bars waiting for the first quote (see setSource). Older than RESUME_GAP: accounts kept, bars dropped.
+let pending = null;
+const RESUME_GAP = 5 * 60 * 1000;
+// ---------- Warm-up from history: with 1 min+ bars on a live feed, the agents start from the exchange's recent
+// candles of the same length instead of waiting for dozens of live bars (also after a long outage).
+const TF_OF_BAR = { 60: '1m', 300: '5m', 900: '15m', 3600: '1h', 14400: '4h' };
+let seeding = null;
+function trySeed() {
+  const tf = TF_OF_BAR[$('bar').value];
+  if (!tf || src !== 'live' || seeding || closes.length >= MAX_WARM) return;
+  const token = sym + '|' + $('bar').value; seeding = token; health.seed = 'yükleniyor';
+  fetchCandles(sym, tf, 400).then(function (res) {
+    if (seeding !== token || token !== sym + '|' + $('bar').value || src !== 'live') return;
+    const ms = barMs(), now = Date.now();
+    // Only finished candles; the one in progress is being built live (curBar).
+    const done = res.candles.filter(function (k) { return k.c > 0 && k.t + ms <= now; }).slice(-400);
+    if (done.length < 10) throw new Error('az mum');
+    closes = done.map(function (k) { return k.c; });
+    bars = done.map(function (k) { return { o: k.o, h: k.h, l: k.l, c: k.c }; });
+    barTick = closes.map(function () { return -1e9; });
+    barIdx = Math.floor(now / ms);
+    health.seed = res.venue;
+    log(acct, 'Geçmişten ' + done.length + ' bar yüklendi (' + res.venue + ', ' + $('bar').selectedOptions[0].textContent + '): ajanlar hazır');
+  }).catch(function () {
+    health.seed = 'olmadı';
+    log(acct, 'Geçmiş barlar yüklenemedi; ajanlar canlı barlarla ısınacak');
+  }).then(function () { if (seeding === token) seeding = null; requestRender(); });
+}
+// Strategy comparison: one hidden 10,000 USDT account per strategy, always on auto, fed the same quotes and bars
+// as the main account and using the same leverage. They live only while the page is open (not saved).
+const STRATS = ['sma', 'momentum', 'meanrev', 'macd', 'rsi', 'sr'];
+const SNAME = { sma: 'SMA kesişimi', momentum: 'Kırılım', meanrev: 'Ortalamaya dönüş', macd: 'MACD', rsi: 'RSI + trend', sr: 'Destek/direnç', ens: 'Oylama' };
+const MAX_WARM = Math.max.apply(null, STRATS.map(warmFor));
+let shadows = null, shadowSince = Date.now();
+function resetShadows() {
+  shadows = {}; shadowSince = Date.now();
+  STRATS.forEach(function (k) { shadows[k] = { a: makeAccount(), st: { cur: null }, blocked: null, lastSide: null }; });
+  applyLiveFunding();
+}
+// Same rules as the main agent in runAgents: exit when the signal no longer matches, don't re-enter the side just
+// stopped out until the signal changes, respect the account's halt.
+function agentStep(sh, name, wide) {
+  const a = sh.a, sg = signalFor(name, sh.st, closes, bars);
+  if (sh.blocked && sg.side !== sh.blocked) sh.blocked = null;
+  if (a.pos && sg.side !== a.pos.side) closePos(a, fillPrice(a.pos.side, true), 'Sinyal ile');
+  if (!a.pos && sg.side && sg.side !== sh.blocked && !a.halt && !wide) {
+    try { openPos(a, sg.side, fillPrice(sg.side, false), sg.stop, +$('lev').value); sh.lastSide = sg.side; } catch (e) { /* refused by risk rules */ }
+  }
+}
+resetShadows();
+let demoMid = BASE[sym], demoDrift = 0, stState = { cur: null };
+const FAST = 5, SLOW = 20, VOLN = 14, MULT = 2, WARM = 21;
+
+function digits(p) { return p >= 1000 ? 2 : p >= 10 ? 3 : 4; }
+function money(n) { return num(n, 2); }
+// Turkish percent: %1,23 and -%1,23
+function pct(frac, d) { const v = frac * 100; return (v < 0 ? '-' : '') + '%' + num(Math.abs(v), d); }
+function signed(n) { return (n >= 0 ? '+' : '') + money(n); }
+function clock(t) { return new Date(t).toLocaleTimeString('tr-TR', { hour12: false }); }
+
+function setSource(s) {
+  if (s === src) return;
+  // A position opened on one source (live or demo) is closed when prices start coming from the other one.
+  // With no quote yet (page just loaded), it closes at its last saved mark from the source it was opened on.
+  if (acct.pos && acct.pos.src !== s) {
+    const px = q.bid != null ? (acct.pos.side === 'long' ? q.bid : q.ask) : acct.last;
+    closePos(acct, px, 'KAYNAK DEĞİŞTİ');
+  }
+  // Page just loaded and the first prices come from the same source (and venue) the saved bars were built on:
+  // carry on with the saved bars and comparison instead of starting over.
+  if (src === 'connecting' && pending && s === pending.src && (s !== 'live' || liveName === pending.venue)) {
+    const p = pending; pending = null; src = s; series = [];
+    if (Date.now() - p.t <= Math.max(RESUME_GAP, MAX_SKIP * barMs()) && String(p.bar || '5') === $('bar').value) {
+      closes = p.closes.slice(-400); barTick = closes.map(function () { return -1e9; });
+      bars = Array.isArray(p.ohlc) && p.ohlc.length === p.closes.length ? p.ohlc.slice(-400) : flatBars(closes);
+      stState = p.st || { cur: null }; blocked = p.blocked || null; lastSide = p.lastSide || null;
+      log(acct, 'Barlar ve strateji karşılaştırması kaldığı yerden devam ediyor (' + closes.length + ' bar)');
+    } else {
+      // Too long a gap: old bars would be stitched to new ones. Keep the accounts, re-warm the agents.
+      closes = []; bars = []; barTick = []; stState = { cur: null }; blocked = null;
+      STRATS.forEach(function (k) { shadows[k].st = { cur: null }; shadows[k].blocked = null; });
+      log(acct, 'Ara uzun sürdü: hesaplar ve karşılaştırma korundu, ajanlar yeniden ısınıyor');
+      setTimeout(trySeed, 0);
+    }
+    return;
+  }
+  src = s; series = []; resetBars();
+  setTimeout(trySeed, 0);
+  log(acct, 'Veri kaynağı: ' + (s === 'live' ? 'canlı ' + liveName + ' akışı' : 'demo akış (gerçek fiyat değil)'));
+}
+// Spike filter: a quote more than SPIKE away from the last fresh mid is held back until SPIKE_CONFIRM quotes in a
+// row agree with it (a real move), so one bad print cannot trigger a stop or a liquidation.
+const SPIKE = 0.03, SPIKE_CONFIRM = 3;
+let suspect = null;
+function onQuote(bid, ask, source) { safely('fiyat', function () { onQuoteInner(bid, ask, source); }); }
+function onQuoteInner(bid, ask, source) {
+  if (!(bid > 0) || !(ask >= bid) || !isFinite(bid) || !isFinite(ask)) return;
+  const mid = (bid + ask) / 2, now = Date.now();
+  if (source === src && q.bid != null && now - q.t < 10000) {
+    const ref = (q.bid + q.ask) / 2;
+    if (Math.abs(mid / ref - 1) > SPIKE) {
+      if (suspect && Math.abs(mid / suspect.mid - 1) < 0.005) suspect.n++; else { suspect = { mid: mid, n: 1 }; health.spikes++; }
+      if (suspect.n < SPIKE_CONFIRM) return;
+      log(acct, 'Büyük fiyat hareketi doğrulandı (' + pct(mid / ref - 1, 2) + ')');
+    }
+  }
+  suspect = null;
+  if (source !== src) setSource(source);
+  // Bars that ended before this quote close at the last price seen before it.
+  if (q.bid != null && fresh()) rollBars(now, (q.bid + q.ask) / 2); else rollBars(now, null);
+  q = { bid: bid, ask: ask, t: now };
+  if (!curBar) curBar = { o: mid, h: mid, l: mid }; else { if (mid > curBar.h) curBar.h = mid; if (mid < curBar.l) curBar.l = mid; }
+  series.push((bid + ask) / 2); tickN++;
+  if (series.length > 240) series.shift();
+  STRATS.forEach(function (k) { const sh = shadows[k]; if (onTick(sh.a, bid, ask)) sh.blocked = sh.lastSide || sh.blocked; });
+  const ev = onTick(acct, bid, ask);
+  if (ev && acct.events.length) blocked = lastSide || blocked;
+  requestRender(); // stops and P/L were updated above; the screen catches up within 200 ms
+}
+let lastSide = null;
+
+const FEEDS = [
+  { name: 'Binance', open: function (id) {
+      const w = new WebSocket('wss://stream.binance.com:9443/ws/' + sym.toLowerCase() + '@bookTicker');
+      w.onmessage = function (e) {
+        try { const d = JSON.parse(e.data); if (d && d.b && d.a) gotLive(parseFloat(d.b), parseFloat(d.a), 'Binance', id); } catch (err) { /* ignore malformed frame */ }
+      };
+      return w; } },
+  { name: 'Hyperliquid', open: function (id) {
+      const w = new WebSocket('wss://api.hyperliquid.xyz/ws');
+      w.onopen = function () { w.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'l2Book', coin: sym.replace(/USDT$/, '') } })); };
+      w.onmessage = function (e) {
+        try {
+          const d = JSON.parse(e.data);
+          if (d && d.channel === 'l2Book' && d.data && d.data.levels) {
+            const b = d.data.levels[0][0], a = d.data.levels[1][0];
+            if (b && a) gotLive(parseFloat(b.px), parseFloat(a.px), 'Hyperliquid', id);
+          }
+        } catch (err) { /* ignore malformed frame */ }
+      };
+      return w; } },
+  // Plain HTTP polling: the fallback for views that block WebSocket (some in-app viewers, some networks).
+  { name: 'Binance (HTTP)', open: function (id) {
+      return poller(function () {
+        return fetch('https://api.binance.com/api/v3/ticker/bookTicker?symbol=' + sym).then(function (r) { return r.json(); })
+          .then(function (d) { if (d && d.bidPrice) gotLive(parseFloat(d.bidPrice), parseFloat(d.askPrice), 'Binance (HTTP)', id); });
+      }); } },
+  { name: 'Hyperliquid (HTTP)', open: function (id) {
+      return poller(function () {
+        return fetch('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'l2Book', coin: sym.replace(/USDT$/, '') }) }).then(function (r) { return r.json(); })
+          .then(function (d) { const lv = hlLevels(d); if (lv) gotLive(parseFloat(lv[0][0].px), parseFloat(lv[1][0].px), 'Hyperliquid (HTTP)', id); });
+      }); } }
+];
+// Hyperliquid's l2Book answers { coin, time, levels: [bids, asks] }; some mirrors send the bare [bids, asks].
+// Accept both; null unless both sides have a level.
+function hlLevels(d) {
+  const lv = Array.isArray(d) ? d : d && d.levels;
+  return Array.isArray(lv) && lv[0] && lv[0][0] && lv[1] && lv[1][0] ? lv : null;
+}
+function poller(job) {
+  const h = { name: '', onclose: null, onerror: null, timer: null, close: function () { clearInterval(h.timer); } };
+  const run = function () { try { job().catch(function (e) { note(h.name, (e && e.name || 'hata') + ': ' + (e && e.message || '')); }); } catch (e) { /* ignore */ } };
+  run(); h.timer = setInterval(run, 1000);
+  return h;
+}
+let feedIdx = 0, feedTimer = null, liveName = 'Binance';
+const diag = {};
+function note(name, msg) { if (!diag[name]) diag[name] = msg; }
+let attemptStart = 0, attemptId = 0;
+function gotLive(bid, ask, name, id) {
+  if (id !== attemptId) return; // late frame or response from a feed we already left
+  if (src === 'live' && name !== liveName) {
+    // Venues differ (Binance spot vs Hyperliquid perp). If their prices agree within 0.2% the switch is seamless:
+    // bars, agents and the comparison carry on. Otherwise the series would jump, so bars start over.
+    const ref = q.bid != null ? (q.bid + q.ask) / 2 : null, mid = (bid + ask) / 2;
+    if (ref && Math.abs(mid / ref - 1) <= 0.002) {
+      log(acct, 'Canlı kaynak değişti: ' + liveName + ' → ' + name + ' (fiyat farkı ' + pct(mid / ref - 1, 3) + '); ajanlar kesintisiz devam ediyor');
+    } else {
+      log(acct, 'Canlı kaynak değişti: ' + liveName + ' → ' + name + '; fiyatlar farklı olduğu için grafik ve barlar yeniden başlıyor');
+      series = []; resetBars();
+    }
+  }
+  everLive = true; liveName = name; onQuote(bid, ask, 'live');
+}
+// The current attempt has delivered at least one quote.
+function attemptDelivered() { return q.t >= attemptStart; }
+function connectLive(idx) {
+  clearTimeout(wsRetry); clearTimeout(feedTimer);
+  try { if (ws) { ws.onclose = null; ws.close(); } } catch (e) { /* ignore */ }
+  feedIdx = idx || 0;
+  if (feedIdx === 0 && everLive) health.reconnects++;
+  attemptStart = Date.now(); const id = ++attemptId;
+  if (feedIdx === 0) connectStart = attemptStart;
+  if (feedIdx >= FEEDS.length) return; // every feed failed: demo takes over, or (once live) self-heal retries
+  try {
+    ws = FEEDS[feedIdx].open(id);
+    if (ws && 'name' in ws && ws.name === '') ws.name = FEEDS[feedIdx].name;
+    const nm = FEEDS[feedIdx].name;
+    // A feed that was delivering and dropped is retried from the top; one that never delivered is left to feedTimer.
+    ws.onclose = function (e) { note(nm, 'bağlantı kapandı' + (e && e.code ? ' (kod ' + e.code + ')' : '')); if (id === attemptId && attemptDelivered()) wsRetry = setTimeout(function () { connectLive(0); }, 2000); };
+    ws.onerror = function () { note(nm, 'bağlantı hatası'); };
+  } catch (e) { note(FEEDS[feedIdx].name, 'açılamadı: ' + (e && e.name || 'hata')); ws = null; }
+  // No quote from this feed within 3.5 s: try the next one, whether or not we were live before.
+  feedTimer = setTimeout(function () { if (id === attemptId && !attemptDelivered()) connectLive(feedIdx + 1); }, 3500);
+}
+// Self-heal: a live feed that went silent (phone slept, connection dropped) is reconnected from the first feed.
+// It waits while a failover pass through the feeds is still under way.
+let lastHeal = 0;
+setInterval(function () {
+  if (!everLive || document.hidden || Date.now() - q.t < 8000 || Date.now() - lastHeal < 8000) return;
+  if (!attemptDelivered() && feedIdx < FEEDS.length) return;
+  lastHeal = Date.now(); connectLive(0);
+}, 2000);
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden && everLive && Date.now() - q.t >= 5000) { lastHeal = Date.now(); connectLive(0); }
+});
+// Demo feed: random walk with slowly drifting trend; only runs when the live feed never connected.
+setInterval(function () {
+  if (everLive || feedIdx < FEEDS.length || Date.now() - connectStart < 4000) return;
+  demoDrift = demoDrift * 0.97 + (Math.random() - 0.5) * 0.00008;
+  demoMid *= 1 + demoDrift + (Math.random() - 0.5) * 0.0006;
+  const half = demoMid * 0.00008;
+  onQuote(demoMid - half, demoMid + half, 'demo');
+}, 500);
+
+function fillPrice(side, closing) {
+  const buying = (side === 'long') !== closing;
+  return buying ? q.ask : q.bid;
+}
+function fresh() { return q.bid != null && Date.now() - q.t <= 5000; }
+
+// ---------- Bars from timestamps, not from a timer ----------
+// A bar closes when the clock crosses a bar boundary (now / barMs). Quotes and a 1 s check both advance it, so
+// background-tab timer throttling cannot stretch or squash bars. Short holes are skipped; long ones re-warm.
+const MAX_SKIP = 5;            // up to this many missing bars: carry on (no fake flat bars are inserted)
+const MAX_SPREAD = 0.003;      // wider than 0.3%: agents don't open (they may still close)
+let barIdx = null;
+const health = { gaps: 0, spikes: 0, reconnects: 0, wideSkips: 0, err: '', errT: 0, lastBarT: 0 };
+function barMs() { return +$('bar').value * 1000; }
+function safely(where, fn) {
+  try { return fn(); } catch (e) { health.err = where + ': ' + (e && e.message || e); health.errT = Date.now(); }
+}
+function rollBars(now, px) {
+  const idx = Math.floor(now / barMs());
+  if (barIdx == null || idx < barIdx) { barIdx = idx; return; }
+  if (idx === barIdx) return;
+  const missed = idx - barIdx - 1;
+  barIdx = idx;
+  if (missed > MAX_SKIP) {
+    // The hole is too long for the bars to mean anything: accounts and positions stay, signals re-warm.
+    // Stops keep being checked on every quote meanwhile.
+    health.gaps++;
+    closes = []; bars = []; curBar = null; barTick = []; stState = { cur: null }; blocked = null;
+    STRATS.forEach(function (k) { shadows[k].st = { cur: null }; shadows[k].blocked = null; });
+    log(acct, 'Veri kesintisi (' + num(missed * barMs() / 1000, 0) + ' sn): pozisyonlar korunuyor, ajanlar yeniden ısınıyor');
+    setTimeout(trySeed, 0);
+    return;
+  }
+  // No trustworthy price for the bar that just ended (the feed was stale): skip it rather than invent one.
+  if (!(px > 0)) return;
+  closeBar(px);
+}
+function closeBar(px) {
+  const cb = curBar || { o: px, h: px, l: px };
+  closes.push(px); bars.push({ o: cb.o, h: Math.max(cb.h, px), l: Math.min(cb.l, px), c: px }); curBar = null;
+  barTick.push(tickN); health.lastBarT = Date.now();
+  if (closes.length > 400) { closes.shift(); bars.shift(); barTick.shift(); }
+  safely('ajan', runAgents);
+}
+function runAgents() {
+  // Agents act only on a fresh quote: an order must fill at a price that exists now.
+  if (!fresh()) return;
+  const wide = (q.ask - q.bid) / q.ask > MAX_SPREAD;
+  if (wide) health.wideSkips++;
+  // While warming up the agent has no opinion yet: it neither opens nor closes (manual positions are left alone).
+  STRATS.forEach(function (k) { if (closes.length >= warmFor(k)) agentStep(shadows[k], k, wide); });
+  // Learned model in use but nothing passed the trust bar: the agent waits (open positions keep their stops).
+  if (modelWaiting()) return;
+  const name = activeStrat(), prm = activePrm();
+  if (!$('auto').checked || closes.length < warmFor(name, prm)) return;
+  const sg = signalFor(name, stState, closes, bars, prm);
+  if (blocked && sg.side !== blocked) blocked = null;
+  if (acct.pos && sg.side !== acct.pos.side) closePos(acct, fillPrice(acct.pos.side, true), 'Sinyal ile');
+  const fl = modelActive() && model.chosen ? model.chosen.filters : null;
+  const veto = !acct.pos && sg.side && sg.side !== blocked ? filterBlocks(sg.side, fl, { funding: md.funding, fng: md.fng }) : null;
+  if (veto) { health.filterSkips = (health.filterSkips || 0) + 1; if (health.lastVeto !== veto) { health.lastVeto = veto; log(acct, (sg.side === 'long' ? 'AL' : 'SAT') + ' sinyali filtrelendi: ' + veto); } }
+  else if (!acct.pos) health.lastVeto = null;
+  if (!acct.pos && sg.side && sg.side !== blocked && !acct.halt && !wide && !veto) {
+    try {
+      openPos(acct, sg.side, fillPrice(sg.side, false), sg.stop, +$('lev').value, modelActive() && model.chosen ? model.chosen.pm : null);
+      acct.pos.src = src; lastSide = sg.side;
+    } catch (e) { /* refused by risk rules */ }
+  }
+}
+// The 1 s check closes bars in quiet markets (no new quote across a boundary), using the last fresh price.
+function restartBars() {
+  clearInterval(barTimer);
+  barTimer = setInterval(function () { if (fresh()) { safely('bar', function () { rollBars(Date.now(), (q.bid + q.ask) / 2); }); requestRender(); } }, 1000);
+}
+
+function manual(side) {
+  $('err').textContent = '';
+  if (!fresh()) { $('err').textContent = 'Fiyat akışı bayat; emir verilmedi.'; return; }
+  try {
+    const entry = fillPrice(side, false), pct = +$('stopPct').value;
+    openPos(acct, side, entry, side === 'long' ? entry * (1 - pct) : entry * (1 + pct), +$('lev').value);
+    acct.pos.src = src; lastSide = side;
+  } catch (e) { $('err').textContent = e.message; }
+  render();
+}
+
+function css(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+// Equity curve: one sample every EQ_EVERY ms while prices flow, plus one at every trade close.
+const EQ_EVERY = 5000, EQ_MAX = 720;
+function sampleEquity(force) {
+  if (!acct.eqHist) acct.eqHist = [];
+  const h = acct.eqHist, now = Date.now();
+  if (!force && h.length && now - h[h.length - 1][0] < EQ_EVERY) return;
+  h.push([now, equity(acct)]);
+  if (h.length > EQ_MAX) h.splice(0, h.length - EQ_MAX);
+}
+function drawEquity() {
+  const c = $('eqChart'), dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  if (!w || !h) return;
+  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  const g = c.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  const pts = (acct.eqHist || []).map(function (r) { return r[1]; });
+  if (pts.length) pts.push(equity(acct)); // live tip, so the curve ends where the Özkaynak tile reads
+  g.font = '11px ' + css('--font-num');
+  if (pts.length < 2) { g.fillStyle = css('--muted'); g.font = '12px ' + css('--font-ui'); g.fillText('Özkaynak eğrisi birkaç saniye içinde başlar…', 10, 20); return; }
+  const base = acct.start;
+  let lo = Math.min(base, Math.min.apply(null, pts)), hi = Math.max(base, Math.max.apply(null, pts));
+  const pad = (hi - lo) * 0.15 || base * 0.001; lo -= pad; hi += pad;
+  const X = function (i) { return 8 + i * (w - 16) / (pts.length - 1); };
+  const Y = function (v) { return h - 8 - (v - lo) / (hi - lo) * (h - 26); };
+  // Start balance as a dashed baseline.
+  g.setLineDash([4, 4]); g.strokeStyle = css('--muted'); g.lineWidth = 1;
+  g.beginPath(); g.moveTo(8, Y(base)); g.lineTo(w - 8, Y(base)); g.stroke(); g.setLineDash([]);
+  const last = pts[pts.length - 1], col = last >= base ? css('--up') : css('--down');
+  g.beginPath(); g.strokeStyle = col; g.lineWidth = 1.6;
+  pts.forEach(function (v, i) { if (i) g.lineTo(X(i), Y(v)); else g.moveTo(X(i), Y(v)); });
+  g.stroke();
+  g.fillStyle = css('--muted'); g.textAlign = 'left'; g.fillText('Özkaynak', 8, 12);
+  g.textAlign = 'right'; g.fillStyle = col; g.fillText(money(last), w - 8, 12); g.textAlign = 'left';
+}
+// ---------- Price chart: the last CHART_BARS bars as candles (plus the one forming), with the selected
+// strategy's indicators drawn on the same bars it trades on. Before 2 bars exist it shows the raw price line.
+const CHART_BARS = 60;
+// Indicator value for each visible bar. fn(closesUpToBar, barsUpToBar) -> value or null.
+function perBar(view0, n, fn) {
+  const out = [];
+  for (let i = 0; i < n; i++) { const gi = view0 + i; out.push(gi < closes.length ? fn(closes.slice(0, gi + 1), bars.slice(0, gi + 1)) : null); }
+  return out;
+}
+function chartModel() {
+  const n = Math.min(CHART_BARS, bars.length), view0 = bars.length - n, view = bars.slice(view0);
+  const forming = curBar && q.bid != null ? { o: curBar.o, h: curBar.h, l: curBar.l, c: (q.bid + q.ask) / 2, forming: true } : null;
+  return { view0: view0, candles: forming ? view.concat([forming]) : view, n: n };
+}
+function drawChart() {
+  const c = $('chart'), dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  if (!w || !h) return;
+  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  const g = c.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  const p = acct.pos, strat = $('strat').value, M = chartModel(), C = M.candles, P = paramsFor(strat, activeStrat() === strat ? activePrm() : null);
+  const hl = function (v, color, label, Y) {
+    const y = Y(v); g.setLineDash([4, 4]); g.strokeStyle = color; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(8, y); g.lineTo(w - 62, y); g.stroke(); g.setLineDash([]);
+    g.fillStyle = color; g.font = '11px ' + css('--font-num'); g.fillText(label, w - 58, y + 4);
+  };
+  if (C.length < 2) {
+    const pts = series.slice(-120);
+    if (pts.length < 2) { g.fillStyle = css('--muted'); g.font = '13px ' + css('--font-ui'); g.fillText('Fiyat bekleniyor…', 12, 24); return; }
+    let lo = Math.min.apply(null, pts), hi = Math.max.apply(null, pts);
+    if (p) { lo = Math.min(lo, p.stop, p.entry); hi = Math.max(hi, p.stop, p.entry); }
+    const pad = (hi - lo) * 0.12 || hi * 0.0005; lo -= pad; hi += pad;
+    const X = function (i) { return 8 + i * (w - 70) / (pts.length - 1); }, Y = function (v) { return h - 10 - (v - lo) / (hi - lo) * (h - 20); };
+    g.beginPath(); g.strokeStyle = css('--fg'); g.lineWidth = 1.6;
+    pts.forEach(function (v, i) { if (i) g.lineTo(X(i), Y(v)); else g.moveTo(X(i), Y(v)); }); g.stroke();
+    if (p) { hl(p.entry, css('--muted'), 'giriş', Y); hl(p.stop, css('--down'), 'stop', Y); }
+    g.fillStyle = css('--muted'); g.font = '11px ' + css('--font-ui'); g.fillText('İlk bar kapanınca mum grafiğine geçer', 10, 14);
+    return;
+  }
+  // Overlays for the selected strategy, one value per visible closed bar.
+  const lines = [], levels = [];
+  const add = function (arr, color, width, dash) { lines.push({ v: arr, col: color, w: width || 1, dash: dash }); };
+  if (strat === 'sma') {
+    add(perBar(M.view0, M.n, function (v) { return v.length >= P.slow ? v.slice(-P.slow).reduce(function (a, b) { return a + b; }, 0) / P.slow : null; }), css('--warn'));
+    add(perBar(M.view0, M.n, function (v) { return v.length >= P.fast ? v.slice(-P.fast).reduce(function (a, b) { return a + b; }, 0) / P.fast : null; }), css('--accent'));
+  } else if (strat === 'meanrev') {
+    const bb = perBar(M.view0, M.n, function (v) { return bollOf(v, P.L, P.z); });
+    add(bb.map(function (x) { return x && x.up; }), css('--accent'), 1, true);
+    add(bb.map(function (x) { return x && x.mid; }), css('--warn'));
+    add(bb.map(function (x) { return x && x.lo; }), css('--accent'), 1, true);
+  } else if (strat === 'momentum') {
+    // Donchian channel: highest / lowest close of the 20 bars before each bar.
+    add(perBar(M.view0, M.n, function (v) { return v.length > P.L ? Math.max.apply(null, v.slice(-P.L - 1, -1)) : null; }), css('--up'), 1, true);
+    add(perBar(M.view0, M.n, function (v) { return v.length > P.L ? Math.min.apply(null, v.slice(-P.L - 1, -1)) : null; }), css('--down'), 1, true);
+  } else if (strat === 'sr' && bars.length >= 10) {
+    const pv = pivotsOf(tail(bars, 130), P.k, 120);
+    if (pv.res) levels.push([pv.res.p, css('--down'), 'direnç']);
+    if (pv.sup) levels.push([pv.sup.p, css('--up'), 'destek']);
+  }
+  let lo = Infinity, hi = -Infinity;
+  C.forEach(function (k) { if (k.l < lo) lo = k.l; if (k.h > hi) hi = k.h; });
+  lines.forEach(function (L) { L.v.forEach(function (x) { if (x != null) { if (x < lo) lo = x; if (x > hi) hi = x; } }); });
+  levels.forEach(function (L) { lo = Math.min(lo, L[0]); hi = Math.max(hi, L[0]); });
+  if (p) { lo = Math.min(lo, p.stop, p.entry); hi = Math.max(hi, p.stop, p.entry); }
+  const pad = (hi - lo) * 0.08 || hi * 0.0005; lo -= pad; hi += pad;
+  const N = C.length, slot = (w - 70) / N, bw = Math.max(1, Math.min(9, slot * 0.6));
+  const X = function (i) { return 8 + slot * (i + 0.5); }, Y = function (v) { return h - 10 - (v - lo) / (hi - lo) * (h - 20); };
+  // Candles: thin wick high-low, body open-close; the forming candle is faded.
+  C.forEach(function (k, i) {
+    const col = k.c >= k.o ? css('--up') : css('--down'), x = X(i);
+    g.globalAlpha = k.forming ? 0.5 : 1; g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x, Y(k.h)); g.lineTo(x, Y(k.l)); g.stroke();
+    const y1 = Y(Math.max(k.o, k.c)), y2 = Y(Math.min(k.o, k.c));
+    g.fillRect(x - bw / 2, y1, bw, Math.max(1, y2 - y1));
+  });
+  g.globalAlpha = 1;
+  lines.forEach(function (L) {
+    g.beginPath(); g.strokeStyle = L.col; g.lineWidth = L.w; g.setLineDash(L.dash ? [3, 3] : []);
+    let started = false;
+    L.v.forEach(function (v, i) { if (v == null) return; if (!started) { g.moveTo(X(i), Y(v)); started = true; } else g.lineTo(X(i), Y(v)); });
+    g.stroke(); g.setLineDash([]);
+  });
+  levels.forEach(function (L) { hl(L[0], L[1], L[2], Y); });
+  if (p) { hl(p.entry, css('--muted'), 'giriş', Y); hl(p.stop, css('--down'), 'stop', Y); }
+  drawInd(M);
+}
+// Lower pane for oscillators: RSI (with its 30/40/60/70 lines) or the MACD histogram with MACD and signal lines.
+function drawInd(M) {
+  const c = $('ind'), strat = $('strat').value, show = (strat === 'rsi' || strat === 'macd') && M && M.n >= 2;
+  c.hidden = !show; $('indLabel').hidden = !show;
+  if (!show) return;
+  const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  if (!w || !h) return;
+  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  const g = c.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  const N = M.candles.length, slot = (w - 70) / N, X = function (i) { return 8 + slot * (i + 0.5); };
+  const P = paramsFor(strat, activeStrat() === strat ? activePrm() : null);
+  g.font = '10px ' + css('--font-num');
+  if (strat === 'rsi') {
+    $('indLabel').textContent = 'RSI (14) · ' + P.lo + ' altı yükselişte alım bölgesi, ' + (100 - P.lo) + ' üstü düşüşte satış bölgesi';
+    const r = perBar(M.view0, M.n, function (v) { return rsiOf(v, 14); });
+    const Y = function (v) { return h - 4 - v / 100 * (h - 8); };
+    [[70, '--down'], [100 - P.lo, '--muted'], [P.lo, '--muted'], [30, '--up']].forEach(function (L) {
+      g.setLineDash([2, 3]); g.strokeStyle = css(L[1]); g.lineWidth = 1; g.beginPath(); g.moveTo(8, Y(L[0])); g.lineTo(w - 62, Y(L[0])); g.stroke();
+      g.setLineDash([]); if (L[0] === 70 || L[0] === 30) { g.fillStyle = css('--muted'); g.fillText(String(L[0]), w - 56, Y(L[0]) + 3); }
+    });
+    g.beginPath(); g.strokeStyle = css('--c5'); g.lineWidth = 1.5; let st = false;
+    r.forEach(function (v, i) { if (v == null) return; if (!st) { g.moveTo(X(i), Y(v)); st = true; } else g.lineTo(X(i), Y(v)); }); g.stroke();
+    return;
+  }
+  $('indLabel').textContent = 'MACD (' + P.f + ', ' + P.s + ', ' + P.g + ') · sütunlar: histogram, mor: MACD, sarı: sinyal';
+  const m = perBar(M.view0, M.n, function (v) { return macdOf(v, P.f, P.s, P.g); });
+  let mx = 0; m.forEach(function (x) { if (x) mx = Math.max(mx, Math.abs(x.hist), Math.abs(x.macd), Math.abs(x.signal)); });
+  if (!(mx > 0)) { g.fillStyle = css('--muted'); g.fillText('MACD için ' + 35 + ' bar gerekli', 10, 14); return; }
+  const Y = function (v) { return h / 2 - v / mx * (h / 2 - 6); };
+  g.strokeStyle = css('--line'); g.beginPath(); g.moveTo(8, Y(0)); g.lineTo(w - 62, Y(0)); g.stroke();
+  const bw = Math.max(1, Math.min(9, slot * 0.6));
+  m.forEach(function (x, i) { if (!x) return; g.fillStyle = x.hist >= 0 ? css('--up') : css('--down'); const y = Y(x.hist), y0 = Y(0); g.fillRect(X(i) - bw / 2, Math.min(y, y0), bw, Math.max(1, Math.abs(y - y0))); });
+  [['macd', '--c4'], ['signal', '--warn']].forEach(function (L) {
+    g.beginPath(); g.strokeStyle = css(L[1]); g.lineWidth = 1.2; let st = false;
+    m.forEach(function (x, i) { if (!x) return; if (!st) { g.moveTo(X(i), Y(x[L[0]])); st = true; } else g.lineTo(X(i), Y(x[L[0]])); }); g.stroke();
+  });
+}
+// ---------- Chart reading: what the indicators say right now, in words ----------
+function renderReading() {
+  const box = $('reading'); box.textContent = '';
+  const rows = [], last = closes[closes.length - 1], have = closes.length;
+  const need = function (k) { return '— (' + have + '/' + k + ' bar)'; };
+  const tr = htfTrend(closes);
+  rows.push(['Trend (4 kat uzun bar, EMA 20)', tr == null ? need(81) : tr === 'up' ? 'Yükseliş: fiyat ortalamanın üstünde' : 'Düşüş: fiyat ortalamanın altında', tr === 'up' ? 'up' : tr === 'down' ? 'down' : '']);
+  const r = rsiOf(closes, 14);
+  rows.push(['RSI (14)', r == null ? need(15) : num(r, 0) + ' · ' + (r >= 70 ? 'aşırı alım: yükseliş yorulabilir' : r <= 30 ? 'aşırı satım: düşüş yorulabilir' : r >= 50 ? 'alıcılar biraz baskın' : 'satıcılar biraz baskın'), r >= 70 ? 'down' : r <= 30 ? 'up' : '']);
+  const m = macdOf(closes);
+  rows.push(['MACD', m == null ? need(35) : (m.hist >= 0 ? 'Pozitif' : 'Negatif') + ', ' + (Math.abs(m.hist) >= Math.abs(m.prevHist) ? 'güçleniyor' : 'zayıflıyor'), m ? (m.hist >= 0 ? 'up' : 'down') : '']);
+  const bb = bollOf(closes, 20, 2);
+  rows.push(['Bollinger (20, 2)', bb == null ? need(20) : (bb.z >= 1.5 ? 'Üst banda yakın' : bb.z <= -1.5 ? 'Alt banda yakın' : 'Bantların ortasında') + ' · genişlik ' + pct(bb.width, 2), '']);
+  if (bars.length >= 10) {
+    const pv = pivotsOf(tail(bars, 130), 3, 120);
+    rows.push(['Direnç (son tepe)', pv.res ? num(pv.res.p, digits(pv.res.p)) + ' · ' + pct(pv.res.p / last - 1, 2) + ' uzakta' : 'henüz belirgin tepe yok', '']);
+    rows.push(['Destek (son dip)', pv.sup ? num(pv.sup.p, digits(pv.sup.p)) + ' · ' + pct(pv.sup.p / last - 1, 2) + ' uzakta' : 'henüz belirgin dip yok', '']);
+  } else rows.push(['Destek / direnç', need(10), '']);
+  const atr = atrOf(bars, 14);
+  rows.push(['Oynaklık (ATR 14)', atr == null ? need(15) : num(atr, digits(last)) + ' · bar başına ' + pct(atr / last, 3), '']);
+  rows.forEach(function (x) {
+    const row = document.createElement('div'), a = document.createElement('span'), b = document.createElement('span');
+    a.textContent = x[0]; b.textContent = x[1]; if (x[2]) b.className = x[2];
+    row.appendChild(a); row.appendChild(b); box.appendChild(row);
+  });
+}
+
+// Screen updates are coalesced (at most ~5 per second); trading logic never waits for them.
+let renderT = null;
+function requestRender() { if (renderT) return; renderT = setTimeout(function () { renderT = null; safely('ekran', render); }, 200); }
+let eqClosedN = -1;
+function render() {
+  // A trade just closed (by hand, signal, stop or liquidation): sample equity right away so the step shows.
+  if (acct.closed.length !== eqClosedN) { if (eqClosedN >= 0 && acct.closed.length > eqClosedN) sampleEquity(true); eqClosedN = acct.closed.length; }
+  const e = equity(acct), pnl = e - acct.start;
+  $('eq').textContent = money(e);
+  // Amount on the first line, percent on its own line under it, so neither is split mid-number.
+  const pnlEl = $('pnl'); pnlEl.textContent = signed(pnl);
+  const pctEl = document.createElement('span'); pctEl.className = 'sub'; pctEl.textContent = pct(pnl / acct.start, 2);
+  pnlEl.appendChild(pctEl);
+  $('pnl').className = 'v ' + (pnl >= 0 ? 'up' : 'down');
+  $('dd').textContent = pct(acct.maxDD, 2);
+  $('cnt').textContent = acct.trades;
+  const wins = acct.closed.filter(function (x) { return x > 0; }), losses = acct.closed.filter(function (x) { return x <= 0; });
+  const gw = wins.reduce(function (a, b) { return a + b; }, 0), gl = -losses.reduce(function (a, b) { return a + b; }, 0);
+  $('wr').textContent = acct.closed.length ? pct(wins.length / acct.closed.length, 0) : '–';
+  $('pf').textContent = !acct.closed.length ? '–' : gl > 0 ? num(gw / gl, 2) : (gw > 0 ? '∞' : num(0, 2));
+  $('halt').hidden = !acct.halt; $('halt').textContent = acct.halt ? 'İşlem durduruldu: ' + acct.halt + (acct.halt === DAY_HALT ? '. Yeni günde (yerel saatle gece yarısı) ya da hesabı sıfırlayınca yeniden işlem açılır.' : '. Hesabı sıfırlayana kadar yeni pozisyon açılmaz.') : '';
+  if (q.bid != null) {
+    const d = digits(q.bid);
+    $('mid').textContent = num((q.bid + q.ask) / 2, d);
+    $('ba').textContent = 'alış ' + num(q.bid, d) + ' / satış ' + num(q.ask, d) + ' · fark ' + pct((q.ask - q.bid) / q.ask, 3);
+  }
+  const pill = $('feedPill'), age = (Date.now() - q.t) / 1000;
+  if (q.bid == null) { pill.className = 'pill'; pill.textContent = 'Bağlanıyor'; }
+  else if (src === 'live' && age > 5) { pill.className = 'pill stale'; pill.textContent = 'Canlı akış bayat · ajan duraklatıldı'; }
+  else if (src === 'live') { pill.className = 'pill live'; pill.textContent = 'Canlı · ' + liveName; }
+  else { pill.className = 'pill demo'; pill.textContent = 'Demo akış · gerçek fiyat değil'; }
+  $('srcNote').textContent = src === 'live'
+    ? 'Fiyatlar ' + liveName + ' herkese açık akışından geliyor. Emirler yalnızca simüle edilir.'
+    : src === 'demo'
+      ? 'Bu görünümden Binance ve Hyperliquid\'e bağlanılamadı; fiyatlar rastgele üretilen demo verisidir. Gerçek fiyatlı çalıştırma için bilgisayarda live_runner.py kullan.'
+      : 'Canlı akışa bağlanılıyor…';
+  if (src === 'demo') $('srcNote').textContent += ' Tanı: ' + (Object.keys(diag).map(function (k) { return k + ' → ' + diag[k]; }).join(' · ') || 'veri gelmedi, hata da bildirilmedi') + '.';
+  const NEED = warmFor(activeStrat(), activePrm()), DESC = { sma: 'SMA 5/20 kesişimi, 2x volatilite stopu', momentum: '20 barlık kırılım, 2x volatilite stopu', meanrev: 'z-skoru 2 aşınca ters yön, 3x volatilite stopu',
+    macd: 'MACD histogramı yönünde, 2x ATR stopu', rsi: 'üst zaman dilimi trendi yönünde RSI geri çekilmesinde giriş (yükselişte RSI<40 al, düşüşte RSI>60 sat), 2x ATR stopu', sr: 'son tepe/dip seviyesinin çeyrek ATR ötesinde kapanışta giriş, 2x ATR stopu' };
+  $('agentNote').textContent = closes.length < NEED
+    ? 'Ajan ısınıyor: ' + closes.length + '/' + NEED + ' bar' + (seeding ? ' (geçmiş barlar yükleniyor…)' : '') + '. Elle AL/SAT ile hemen deneyebilirsin.' +
+      (src === 'demo' && +$('bar').value >= 60 ? ' Demo akışta geçmiş veri yok; uzun barlarla ısınma çok sürer, denemek için 2–15 sn bar seç.' : '')
+    : !$('auto').checked ? 'Ajan kapalı.'
+    : modelWaiting() ? 'Ajan bekliyor: öğrenilen modelde güvenilir strateji yok, yeni pozisyon açmıyor. Model kendini güncelledikçe yeniden değerlendirir.'
+    : acct.halt ? 'Ajan durdu (' + acct.halt + '); açık pozisyon varsa sinyal ve stop ile yönetilmeye devam eder.'
+    : !fresh() ? 'Ajan duraklatıldı: fiyat akışı bayat.'
+    : 'Ajan açık: ' + (modelActive() && model.chosen ? 'öğrenilen model · ' + modelDesc(model.chosen) : DESC[$('strat').value]) + '.';
+  const p = acct.pos, box = $('pos');
+  box.textContent = '';
+  if (!p) { box.textContent = 'Açık pozisyon yok.'; }
+  else {
+    const u = unreal(acct), d = digits(p.entry), f = p.funding || 0;
+    // Loss if the stop fills exactly: price move + entry costs + exit costs + funding so far.
+    const atStop = p.qty * Math.abs(p.entry - p.stop) + p.costs + p.qty * p.stop * (acct.fee + acct.slip) + f;
+    [['Yön', p.side === 'long' ? 'AL (long)' : 'SAT (short)'], ['Miktar', num(p.qty, p.qty >= 1 ? 4 : 6)], ['Giriş', num(p.entry, d)],
+     ['Stop', num(p.stop, d)], ['Likidasyon', num(p.liq, d)], ['Kaldıraç', p.lev + 'x'],
+     ['Stop\'ta kayıp (maliyetlerle)', '≈ ' + money(atStop)], ['Giriş kayması', p.slipIn != null ? pct(p.slipIn, 3) : '–'], ['Yönetim', p.pm ? (p.trailing ? 'takip stop devrede' : pmLabel(p.pm)) + (p.tpDone ? ' · kısmi kâr alındı (+' + money(p.partialPnl || 0) + ')' : '') : 'yok'], ['Fonlama', f ? (f > 0 ? '-' : '+') + money(Math.abs(f)) : money(0)],
+     ['Anlık K/Z', signed(u)]].forEach(function (r) {
+      const row = document.createElement('div'), a = document.createElement('span'), b = document.createElement('span');
+      a.textContent = r[0]; b.textContent = r[1];
+      if (r[0] === 'Anlık K/Z') b.className = u >= 0 ? 'up' : 'down';
+      row.appendChild(a); row.appendChild(b); box.appendChild(row);
+    });
+  }
+  const ul = $('log'); ul.textContent = '';
+  acct.events.slice(-14).reverse().forEach(function (ev) {
+    const li = document.createElement('li'), t = document.createElement('time'), s = document.createElement('span');
+    t.textContent = clock(ev.t); s.textContent = ev.msg; li.appendChild(t); li.appendChild(s); ul.appendChild(li);
+  });
+  renderCmp(); renderHealth(); renderReading(); renderLearn(); renderMarket();
+  drawChart(); drawEquity();
+}
+// SHARED-START (also loaded by metyu-runner.mjs: keep it free of page/DOM code)
+// ---------- Backtest: replay historical candles through the same engine and strategy rules ----------
+const TF_MS = { '1m': 60e3, '5m': 300e3, '15m': 900e3, '1h': 3600e3, '4h': 14400e3 };
+const BT_HALF_SPREAD = 0.00005; // assumed bid/ask half-spread around each candle price (0.01% spread)
+const BT_STOP_SLIP = 0.0003;    // extra slippage on stop exits in backtests (stops fire in fast markets)
+// USD resting within 1% of the price on one side, used when no live measurement is available. Deliberately cautious.
+const DEPTH_DEFAULT = { BTCUSDT: 15e6, ETHUSDT: 6e6, SOLUSDT: 1.5e6 };
+let btBusy = false;
+// Candles as {t, o, h, l, c}, oldest first. Binance pages backwards 1000 at a time; Hyperliquid returns up to 5000.
+function fetchBinance(symbol, tf, n) {
+  const out = [];
+  const page = function (endTime) {
+    const lim = Math.min(1000, n - out.length);
+    return fetch('https://api.binance.com/api/v3/klines?symbol=' + symbol + '&interval=' + tf + '&limit=' + lim + (endTime ? '&endTime=' + endTime : ''))
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (rows) {
+        if (!Array.isArray(rows)) throw new Error('beklenmeyen yanıt');
+        const got = rows.map(function (k) { return { t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4] }; });
+        out.unshift.apply(out, got);
+        if (got.length === lim && out.length < n) return page(got[0].t - 1);
+        return out;
+      });
+  };
+  return page(null);
+}
+function fetchHyperliquid(symbol, tf, n, tries) {
+  const end = Date.now(), start = end - n * TF_MS[tf];
+  return fetch('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'candleSnapshot', req: { coin: symbol.replace(/USDT$/, ''), interval: tf, startTime: start, endTime: end } }) })
+    .then(function (r) {
+      // Rate-limited: wait and try again (5 s, 10 s, 20 s).
+      if (r.status === 429 && (tries || 0) < 3) return new Promise(function (res) { setTimeout(res, 5000 * Math.pow(2, tries || 0)); }).then(function () { return fetchHyperliquid(symbol, tf, n, (tries || 0) + 1); });
+      if (!r.ok) throw new Error('HTTP ' + r.status); return r.json();
+    })
+    .then(function (rows) {
+      if (!Array.isArray(rows)) throw new Error('beklenmeyen yanıt');
+      return rows.map(function (k) { return { t: k.t, o: +k.o, h: +k.h, l: +k.l, c: +k.c }; }).slice(-n);
+    });
+}
+function fetchCandles(symbol, tf, n) {
+  const errs = [];
+  return fetchBinance(symbol, tf, n).then(function (c) { return { candles: c, venue: 'Binance' }; }, function (e) {
+    errs.push('Binance: ' + (e && e.message || 'hata'));
+    return fetchHyperliquid(symbol, tf, n).then(function (c) { return { candles: c, venue: 'Hyperliquid' }; }, function (e2) {
+      errs.push('Hyperliquid: ' + (e2 && e2.message || 'hata'));
+      throw new Error(errs.join(' · '));
+    });
+  });
+}
+// ---------- Market history for learning: funding rates and the Fear & Greed index ----------
+// Funding: Binance futures (per 8 h); fallback Hyperliquid (hourly, scaled to 8 h). Index: alternative.me (daily).
+// Each returns ascending [{t, v}]; failures resolve to null so learning still runs without that data.
+function getJson(url, opt) { return fetch(url, opt).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }); }
+function fetchFundingHist(symbol, from, to) {
+  const out = [];
+  const binance = function (start) {
+    return getJson('https://fapi.binance.com/fapi/v1/fundingRate?symbol=' + symbol + '&startTime=' + start + '&endTime=' + to + '&limit=1000').then(function (rows) {
+      if (!Array.isArray(rows)) throw new Error('beklenmeyen yanıt');
+      rows.forEach(function (r) { out.push({ t: +r.fundingTime, v: +r.fundingRate }); });
+      if (rows.length === 1000) return binance(+rows[rows.length - 1].fundingTime + 1);
+      return { ev: out, src: 'Binance' };
+    });
+  };
+  // Long ranges take dozens of pages; a page that fails (rate limit) is retried up to 4 times with a growing pause.
+  const hlPage = function (start, tries) {
+    return getJson('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'fundingHistory', coin: symbol.replace(/USDT$/, ''), startTime: start, endTime: to }) }).catch(function (e) {
+      if (tries >= 4) throw e;
+      return new Promise(function (res) { setTimeout(res, 1500 * (tries + 1)); }).then(function () { return hlPage(start, tries + 1); });
+    });
+  };
+  const hl = function (start, acc) {
+    return hlPage(start, 0).then(function (rows) {
+      if (!Array.isArray(rows)) throw new Error('beklenmeyen yanıt');
+      rows.forEach(function (r) { acc.push({ t: +r.time, v: +r.fundingRate * 8 }); });
+      // Paced: Hyperliquid limits requests per minute, and a 4h history needs ~40 pages.
+      if (rows.length >= 500 && acc.length < 30000) return new Promise(function (res) { setTimeout(res, 1200); }).then(function () { return hl(+rows[rows.length - 1].time + 1, acc); });
+      return { ev: acc, src: 'Hyperliquid' };
+    });
+  };
+  return binance(from).catch(function () { return hl(from, []); }).then(function (x) { return x.ev.length ? x : null; }).catch(function () { return null; });
+}
+function fetchFngHist() {
+  return getJson('https://api.alternative.me/fng/?limit=0&format=json').then(function (d) {
+    const ev = (d && d.data || []).map(function (r) { return { t: +r.timestamp * 1000, v: +r.value }; })
+      .filter(function (r) { return r.v >= 0 && r.v <= 100; }).sort(function (a, b) { return a.t - b.t; });
+    return ev.length ? { ev: ev, src: 'alternative.me' } : null;
+  }).catch(function () { return null; });
+}
+// Value in force at each candle's close (the latest event at or before it); null before the first event.
+function alignEvents(candles, tfMs, ev) {
+  if (!ev) return null;
+  const out = new Array(candles.length); let j = -1;
+  for (let i = 0; i < candles.length; i++) {
+    const t = candles[i].t + tfMs;
+    while (j + 1 < ev.length && ev[j + 1].t <= t) j++;
+    out[i] = j >= 0 ? ev[j].v : null;
+  }
+  return out;
+}
+function fetchMarketHistory(symbol, candles, tfMs) {
+  const from = candles[0].t - 8 * 3600e3, to = candles[candles.length - 1].t + tfMs;
+  return Promise.all([fetchFundingHist(symbol, from, to), fetchFngHist()]).then(function (r) {
+    return { fund: alignEvents(candles, tfMs, r[0] && r[0].ev), fng: alignEvents(candles, tfMs, r[1] && r[1].ev),
+      fundSrc: r[0] && r[0].src, fngSrc: r[1] && r[1].src };
+  });
+}
+// One strategy over the candles. Inside each candle the price walks open → low → high → close (or open → high →
+// low → close on a down candle), so stops and liquidations inside the candle are caught. Signals use closes only and
+// fill at the close, like the live agent at the end of each bar.
+// prm: strategy settings (defaults if omitted). tradeFrom: candles before this index only warm the strategy up
+// (its indicators and state) — no trades, no equity curve — so a test window starts with a warmed-up strategy.
+// ext (optional): { fund, fng, filters } — per-candle funding rate (per 8 h) and Fear & Greed value aligned to
+// `candles`, and the filters to apply when opening.
+function backtest(name, candles, lev, tfMs, prm, tradeFrom, ext) {
+  tradeFrom = tradeFrom || 0;
+  const a = makeAccount(), st = { cur: null }, cl = [], bl = [], curve = [], warm = warmFor(name, prm);
+  // No order book in history: size-aware slippage from the band depth, and a fast-market extra on stop exits.
+  a.depthUsd = ext && ext.depthUsd || 0; a.stopSlip = BT_STOP_SLIP;
+  let blockedB = null, lastB = null;
+  const quote = function (px, t) {
+    a.clock = t;
+    if (onTick(a, px * (1 - BT_HALF_SPREAD), px * (1 + BT_HALF_SPREAD), t)) blockedB = lastB || blockedB;
+  };
+  for (let i = 0; i < candles.length; i++) {
+    const k = candles[i], live = i >= tradeFrom;
+    a.fund = ext && ext.fund && ext.fund[i] != null ? ext.fund[i] : 0.0001;
+    if (live) {
+      const path = k.c >= k.o ? [k.o, k.l, k.h, k.c] : [k.o, k.h, k.l, k.c];
+      for (let j = 0; j < 4; j++) {
+        const t = k.t + tfMs * (j + 1) / 4;
+        // Inside the candle the price passes through every level between two path points, so a stop in between
+        // fills at the stop (plus slippage), not at the far point. A gap at the open (j = 0) fills at the open.
+        if (j > 0 && a.pos) {
+          const from = path[j - 1], to = path[j], long = a.pos.side === 'long';
+          // Partial take-profit level crossed on the way: fill there too.
+          if (a.pos.pm && a.pos.pm.tp && !a.pos.tpDone) {
+            const tp = long ? a.pos.entry + a.pos.pm.tp * a.pos.r0 : a.pos.entry - a.pos.pm.tp * a.pos.r0;
+            if (long ? from < tp && to > tp : from > tp && to < tp) quote(tp, t);
+          }
+          const sp = a.pos && a.pos.stop;
+          if (a.pos && (long ? from > sp && to < sp : from < sp && to > sp)) quote(sp, t);
+        }
+        quote(path[j], t);
+      }
+    }
+    cl.push(k.c);
+    bl.push({ o: k.o, h: k.h, l: k.l, c: k.c });
+    if (cl.length >= warm) {
+      const sg = signalFor(name, st, cl, bl, prm), bid = k.c * (1 - BT_HALF_SPREAD), ask = k.c * (1 + BT_HALF_SPREAD);
+      if (live) {
+        if (blockedB && sg.side !== blockedB) blockedB = null;
+        if (a.pos && sg.side !== a.pos.side) closePos(a, a.pos.side === 'long' ? bid : ask, 'Sinyal ile');
+        const veto = ext && ext.filters ? filterBlocks(sg.side, ext.filters, { funding: ext.fund ? ext.fund[i] : null, fng: ext.fng ? ext.fng[i] : null }) : null;
+        if (!a.pos && sg.side && sg.side !== blockedB && !a.halt && !veto) {
+          try { openPos(a, sg.side, sg.side === 'long' ? ask : bid, sg.stop, lev, ext && ext.pm); lastB = sg.side; } catch (e) { /* refused by risk rules */ }
+        }
+      }
+    }
+    if (live) curve.push(equity(a));
+  }
+  if (a.pos) { const last = candles[candles.length - 1].c; closePos(a, a.pos.side === 'long' ? last * (1 - BT_HALF_SPREAD) : last * (1 + BT_HALF_SPREAD), 'Test sonu'); curve[curve.length - 1] = equity(a); }
+  const wins = a.closed.filter(function (x) { return x > 0; }), losses = a.closed.filter(function (x) { return x <= 0; });
+  const gw = wins.reduce(function (x, y) { return x + y; }, 0), gl = -losses.reduce(function (x, y) { return x + y; }, 0);
+  return { name: name, prm: prm || null, a: a, curve: curve, pnl: equity(a) - a.start, ret: (equity(a) - a.start) / a.start, maxDD: a.maxDD,
+    closedPnl: a.closed.slice(), n: a.closed.length, wins: wins.length, pf: gl > 0 ? gw / gl : (gw > 0 ? Infinity : 0) };
+}
+
+// ---------- Walk-forward learning ----------
+// The history is cut into WF_FOLDS rolling windows: pick each strategy's settings on a training window (30% of the
+// data), then trade them on the next, unseen window (10%), and slide on. Only the unseen windows count. A strategy is
+// trusted only if, on unseen data, it made money over enough trades with a profit factor above the bar; the live
+// settings come from the most recent training window.
+const WF = { pad: 300, folds: 7, trainFrac: 0.3, minTrainTrades: 6, minOosTrades: 20, minPf: 1.3, minPosFolds: 4, maxDD: 0.15, votePf: 1.5, votePosFolds: 5 };
+function trainScore(r) { return r.n < WF.minTrainTrades ? -Infinity : r.ret / Math.max(r.maxDD, 0.02); }
+function sliceExt(ext, a, b, filters) {
+  if (!ext) return filters ? { filters: filters } : null;
+  return { fund: ext.fund ? ext.fund.slice(a, b) : null, fng: ext.fng ? ext.fng.slice(a, b) : null, filters: filters || null, depthUsd: ext.depthUsd || 0, pm: null };
+}
+function pickParams(name, candles, lev, tfMs, from, to, ext) {
+  // Training window [from, to) with WF.pad warm-up candles before it. Settings are picked without filters.
+  const s0 = Math.max(0, from - WF.pad), seg = candles.slice(s0, to), tf0 = from - s0, sx = sliceExt(ext, s0, to, null);
+  let best = null;
+  PARAM_GRID[name].forEach(function (prm) {
+    const r = backtest(name, seg, lev, tfMs, prm, tf0, sx), sc = trainScore(r);
+    if (!best || sc > best.sc) best = { prm: prm, sc: sc, r: r };
+  });
+  return best.sc === -Infinity ? { prm: DEFAULTS[name], weak: true, sc: -Infinity } : { prm: best.prm, weak: false, sc: best.sc };
+}
+function oosRun(name, candles, lev, tfMs, prm, from, to, ext, filters, pm) {
+  const s0 = Math.max(0, from - WF.pad), x = sliceExt(ext, s0, to, filters) || {};
+  x.pm = pm || null;
+  return backtest(name, candles.slice(s0, to), lev, tfMs, prm, from - s0, x);
+}
+function wfScore(o) { return o.ret / Math.max(o.maxDD, 0.02); }
+// Voting members for one window: the strategies that did well on that window's training data (enough trades, a
+// positive return / drawdown score), best first, at most three.
+function voteMembers(picks) {
+  return picks.filter(function (p) { return p && !p.weak && p.sc > 0; }).sort(function (a, b) { return b.sc - a.sc; }).slice(0, 3)
+    .map(function (p) { return { name: p.name, prm: p.prm }; });
+}
+// Chain the unseen windows into one result: returns compound, trades and P/L add up, drawdown is measured on the
+// chained equity curve.
+function chainOos(runs) {
+  let eq = 1, peak = 1, mdd = 0, n = 0, wins = 0, gw = 0, gl = 0, pos = 0;
+  runs.forEach(function (r) {
+    if (r.ret > 0) pos++;
+    r.curve.forEach(function (v) { const e = eq * v / 10000; peak = Math.max(peak, e); mdd = Math.max(mdd, (peak - e) / peak); });
+    eq *= 1 + r.ret; n += r.n; wins += r.wins;
+    r.closedPnl.forEach(function (x) { if (x > 0) gw += x; else gl -= x; });
+  });
+  return { ret: eq - 1, maxDD: mdd, n: n, wins: wins, posFolds: pos, folds: runs.length, pf: gl > 0 ? gw / gl : (gw > 0 ? Infinity : 0) };
+}
+// Trusted: enough trades, profitable, profit factor over the bar, drawdown under the cap, and profitable in most of
+// the unseen windows (so one lucky stretch cannot carry it).
+function trusted(o) { return o.n >= WF.minOosTrades && o.ret > 0 && o.pf >= WF.minPf && o.maxDD < WF.maxDD && o.posFolds >= WF.minPosFolds; }
+// Voting is an extra, more flexible candidate on top of the six: more candidates means more chances for luck to pass,
+// so it has to clear a higher bar.
+function trustedVote(o) { return trusted(o) && o.pf >= WF.votePf && o.posFolds >= WF.votePosFolds; }
+// Runs in small slices so the page (and the live agent) keep running. onProgress(done, total).
+// ext (optional): { fund, fng } aligned to candles. Each filter set with data is tested on the same unseen windows;
+// a filter is kept only if the strategy stays trusted with it and its return/drawdown improves by 10%+ over no filter.
+// Pick among variants (filters, or position management) measured on the same unseen windows. A variant replaces the
+// base only if the strategy stays trusted with it, it beats the base in most windows where they differ (and wins at
+// least twice as often as it loses), and it improves return / drawdown by 10%+ — not just in the total.
+function pickVariant(baseKey, runsByKey, keys) {
+  const baseRuns = runsByKey[baseKey];
+  const evals = keys.map(function (k) {
+    let w = 0, l = 0;
+    runsByKey[k].forEach(function (r, i) { const d = r.ret - baseRuns[i].ret; if (d > 1e-6) w++; else if (d < -1e-6) l++; });
+    return { key: k, o: chainOos(runsByKey[k]), foldWins: w, foldLosses: l };
+  });
+  const base = evals.find(function (e) { return e.key === baseKey; });
+  let adopt = base;
+  evals.forEach(function (e) {
+    if (e === base) return;
+    if (trusted(e.o) && e.foldWins >= 4 && e.foldWins >= 2 * e.foldLosses &&
+        wfScore(e.o) > wfScore(adopt.o) * 1.1 + 1e-9 && wfScore(e.o) > wfScore(base.o) * 1.1 + 1e-9) adopt = e;
+  });
+  return { adoptKey: adopt.key, adoptO: adopt.o, baseO: base.o,
+    evals: evals.map(function (e) { return { key: e.key, ret: e.o.ret, n: e.o.n, pf: e.o.pf, maxDD: e.o.maxDD, posFolds: e.o.posFolds, foldWins: e.foldWins, foldLosses: e.foldLosses }; }) };
+}
+// ext (optional): { fund, fng, depthUsd } aligned to candles. Stages, all on the same unseen windows:
+//  1. each strategy's settings are picked on each training window;
+//  2. filter sets (with data) are compared and one may be kept;
+//  3. position-management variants are compared on top of the kept filter, and one may be kept;
+//  4. voting is built per window from the training results only.
+function walkForward(candles, lev, tfMs, onProgress, ext) {
+  const N = candles.length, usable = N - WF.pad;
+  const trainLen = Math.floor(usable * WF.trainFrac), testLen = Math.floor((usable - trainLen) / WF.folds);
+  if (testLen < 30) return Promise.reject(new Error('öğrenmek için mum sayısı az'));
+  const sets = FILTER_SETS.filter(function (fl) { return (!fl.funding || (ext && ext.fund)) && (!fl.fng || (ext && ext.fng)); });
+  const pms = PM_SETS.filter(function (x) { return x; });
+  const jobs = [];
+  STRATS.forEach(function (name) { for (let f = 0; f < WF.folds; f++) jobs.push({ name: name, f: f }); });
+  STRATS.forEach(function (name) { for (let f = 0; f < WF.folds; f++) jobs.push({ pm: true, name: name, f: f }); });
+  for (let f = 0; f < WF.folds; f++) jobs.push({ ens: true, f: f });
+  const ensRuns = [], ensMembers = [], filt = {};
+  const per = {};
+  STRATS.forEach(function (n) {
+    per[n] = { plain: [], picks: [], byF: {}, byPm: {} };
+    sets.forEach(function (fl) { per[n].byF[filterKey(fl)] = []; });
+    pms.forEach(function (pm) { per[n].byPm[pmKey(pm)] = []; });
+  });
+  // Filter choice for a strategy, once all its windows have run.
+  const filterChoice = function (name) {
+    if (!filt[name]) {
+      const fc = pickVariant('-', per[name].byF, sets.map(filterKey));
+      fc.fl = fc.adoptKey === '-' ? null : sets.find(function (x) { return filterKey(x) === fc.adoptKey; });
+      filt[name] = fc;
+    }
+    return filt[name];
+  };
+  let i = 0;
+  return new Promise(function (resolve, reject) {
+    const step = function () {
+      try {
+        const t0 = Date.now();
+        while (i < jobs.length && Date.now() - t0 < 30) {
+          const j = jobs[i++], trainFrom = WF.pad + j.f * testLen, testFrom = trainFrom + trainLen, testTo = testFrom + testLen;
+          if (j.ens) {
+            const mem = voteMembers(STRATS.map(function (n) { return Object.assign({ name: n }, per[n].picks[j.f]); }));
+            ensMembers.push(mem);
+            ensRuns.push(mem.length >= 2 ? oosRun('ens', candles, lev, tfMs, { members: mem }, testFrom, testTo, ext, null)
+              : { ret: 0, n: 0, wins: 0, curve: [10000], closedPnl: [], maxDD: 0 });
+            continue;
+          }
+          if (j.pm) {
+            const fc = filterChoice(j.name), pk = per[j.name].picks[j.f];
+            pms.forEach(function (pm) { per[j.name].byPm[pmKey(pm)].push(oosRun(j.name, candles, lev, tfMs, pk.prm, testFrom, testTo, ext, fc.fl, pm)); });
+            continue;
+          }
+          const pk = pickParams(j.name, candles, lev, tfMs, trainFrom, testFrom, ext);
+          per[j.name].picks.push(pk);
+          sets.forEach(function (fl) {
+            per[j.name].byF[filterKey(fl)].push(oosRun(j.name, candles, lev, tfMs, pk.prm, testFrom, testTo, ext, filterKey(fl) === '-' ? null : fl));
+          });
+          per[j.name].plain.push(oosRun(j.name, candles, lev, tfMs, null, testFrom, testTo, ext, null));
+        }
+        if (onProgress) onProgress(i, jobs.length);
+        if (i < jobs.length) { setTimeout(step, 0); return; }
+        const latestPicks = {};
+        const results = STRATS.map(function (name) {
+          const fc = filterChoice(name);
+          const pmRuns = Object.assign({ '-': per[name].byF[fc.adoptKey] }, per[name].byPm);
+          const pc = pickVariant('-', pmRuns, ['-'].concat(pms.map(pmKey)));
+          const pm = pc.adoptKey === '-' ? null : pms.find(function (x) { return pmKey(x) === pc.adoptKey; });
+          // Live settings: tuned on the latest training-sized window.
+          const latest = pickParams(name, candles, lev, tfMs, N - trainLen, N, ext);
+          latestPicks[name] = latest;
+          return { name: name, oos: pc.adoptO, base: fc.baseO, plain: chainOos(per[name].plain), prm: latest.prm, weak: latest.weak,
+            filters: fc.fl, pm: pm, ok: trusted(pc.adoptO), filterEval: fc.evals, pmEval: pc.evals };
+        });
+        const ok = results.filter(function (r) { return r.ok; }).sort(function (x, y) { return wfScore(y.oos) - wfScore(x.oos); });
+        // Voting: chained over the unseen windows like any strategy; its live members come from the latest window.
+        const ens = chainOos(ensRuns), liveMem = voteMembers(STRATS.map(function (n) { return Object.assign({ name: n }, latestPicks[n]); }));
+        const ensRow = { name: 'ens', oos: ens, base: ens, plain: { ret: null, n: null }, prm: { members: liveMem }, weak: liveMem.length < 2,
+          filters: null, pm: null, ok: trustedVote(ens) && liveMem.length >= 2, filterEval: [], pmEval: [], windowsWithVote: ensMembers.filter(function (m) { return m.length >= 2; }).length };
+        results.push(ensRow);
+        // Prefer the simpler single strategy unless voting is clearly better (10%+ on return / drawdown).
+        let chosen = ok.length ? { name: ok[0].name, prm: ok[0].prm, filters: ok[0].filters, pm: ok[0].pm } : null;
+        if (ensRow.ok && (!ok.length || wfScore(ens) > wfScore(ok[0].oos) * 1.1)) chosen = { name: 'ens', prm: ensRow.prm, filters: null, pm: null };
+        resolve({ results: results, chosen: chosen, sets: sets.map(filterKey),
+          span: { from: candles[0].t, to: candles[N - 1].t + tfMs, n: N, trainLen: trainLen, testLen: testLen, folds: WF.folds } });
+      } catch (e) { reject(e); }
+    };
+    step();
+  });
+}
+// SHARED-END
+let btLast = null;
+function runBacktest() {
+  if (btBusy) return;
+  btBusy = true; $('btRun').disabled = true;
+  const tf = $('btTf').value, n = +$('btN').value, lev = +$('lev').value, symbol = sym;
+  $('btStatus').textContent = symbol + ' için ' + num(n, 0) + ' mum indiriliyor…';
+  fetchCandles(symbol, tf, n).then(function (res) {
+    const c = res.candles.filter(function (k) { return k.c > 0 && k.h >= k.l; });
+    if (c.length < MAX_WARM + 10) throw new Error('yeterli mum gelmedi (' + c.length + ')');
+    $('btStatus').textContent = 'Fonlama geçmişi alınıyor…';
+    return fetchMarketHistory(symbol, c, TF_MS[tf]).then(function (mh) {
+    const depth = md.depthUsd || DEPTH_DEFAULT[symbol] || 0;
+    const results = STRATS.map(function (k) { return backtest(k, c, lev, TF_MS[tf], null, 0, { fund: mh.fund, depthUsd: depth }); });
+    const hold = c.map(function (k) { return 10000 * k.c / c[0].c; });
+    btLast = { results: results, hold: hold, candles: c, venue: res.venue, tf: tf, lev: lev, symbol: symbol, fundSrc: mh.fundSrc };
+    renderBacktest();
+    const d = function (t) { return new Date(t).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+    $('btStatus').textContent = res.venue + ' · ' + symbol + ' · ' + num(c.length, 0) + ' mum (' + $('btTf').selectedOptions[0].textContent + ') · ' + d(c[0].t) + ' – ' + d(c[c.length - 1].t + TF_MS[tf]) + ' · ' + lev + 'x · fonlama: ' + (mh.fundSrc ? mh.fundSrc + ' geçmişi' : 'alınamadı, sabit %0,01');
+    });
+  }).catch(function (e) {
+    $('btStatus').textContent = 'Geçmiş veri alınamadı (' + (e && e.message || 'hata') + '). Bu görünüm dış sitelere bağlanmayı engelliyor olabilir; dosyayı tarayıcıda açıp tekrar dene.';
+  }).then(function () { btBusy = false; $('btRun').disabled = false; });
+}
+function haltShort(h) { return h === DAY_HALT ? 'durdu (günlük)' : h ? 'durdu (düşüş)' : ''; }
+const BT_COLORS = { sma: '--accent', momentum: '--warn', meanrev: '--fg', macd: '--c4', rsi: '--c5', sr: '--c6' };
+function renderBacktest() {
+  if (!btLast) return;
+  $('btOut').hidden = false;
+  const body = $('btBody'); body.textContent = '';
+  const cur = $('strat').value;
+  const row = function (label, sub, pnl, cells, sel) {
+    const tr = document.createElement('tr'); if (sel) tr.className = 'sel';
+    const td0 = document.createElement('td'); td0.textContent = label;
+    if (sub) { const sm = document.createElement('small'); sm.textContent = sub; td0.appendChild(sm); }
+    tr.appendChild(td0);
+    const tdp = document.createElement('td'); tdp.textContent = signed(pnl); tdp.className = pnl >= 0 ? 'up' : 'down';
+    const sm = document.createElement('small'); sm.textContent = pct(pnl / 10000, 2); tdp.appendChild(sm); tr.appendChild(tdp);
+    // A cell is a string, or [main, small line under it].
+    cells.forEach(function (v) {
+      const td = document.createElement('td'), pair = Array.isArray(v);
+      td.textContent = pair ? v[0] : v;
+      if (pair && v[1]) { const s2 = document.createElement('small'); s2.textContent = v[1]; td.appendChild(s2); }
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  };
+  btLast.results.forEach(function (r) {
+    row(SNAME[r.name], haltShort(r.a.halt), r.pnl,
+      [String(r.a.trades), [r.n ? pct(r.wins / r.n, 0) : '–', r.n ? 'kâr f. ' + (r.pf === Infinity ? '∞' : num(r.pf, 2)) : ''], pct(r.a.maxDD, 2)], r.name === cur);
+  });
+  // Buy and hold, 1x, no costs: the bar every strategy has to clear.
+  const h = btLast.hold; let pk = h[0], mdd = 0;
+  h.forEach(function (v) { pk = Math.max(pk, v); mdd = Math.max(mdd, (pk - v) / pk); });
+  row('Al ve tut', '1x, maliyetsiz', h[h.length - 1] - 10000, ['–', '–', pct(mdd, 2)], false);
+  const lg = $('btLegend'); lg.textContent = '';
+  btLast.results.map(function (r) { return [SNAME[r.name], css(BT_COLORS[r.name]), false]; }).concat([['Al ve tut', css('--muted'), true]]).forEach(function (x) {
+    const sp = document.createElement('span'), i = document.createElement('i');
+    i.style.background = x[2] ? 'repeating-linear-gradient(90deg,' + x[1] + ' 0 4px,transparent 4px 7px)' : x[1];
+    sp.appendChild(i); sp.appendChild(document.createTextNode(x[0])); lg.appendChild(sp);
+  });
+  drawBacktest();
+  const best = btLast.results.slice().sort(function (x, y) { return y.pnl - x.pnl; })[0];
+  const few = best.n < 30;
+  $('btNote').textContent = 'En iyi sonuç: ' + SNAME[best.name] + ' (' + signed(best.pnl) + ', ' + best.n + ' işlem). ' +
+    (few ? 'İşlem sayısı az; bu farkın şanstan kaynaklanması çok olası. Daha fazla mum ya da daha kısa mum süresiyle tekrar dene. ' : '') +
+    'Geçmişte iyi giden strateji gelecekte de iyi gider diye bir kural yok. Varsayımlar: %0,01 alış-satış farkı, mum içi fiyat yolu açılış→dip→tepe→kapanış (düşen mumda tepe önce), sinyal kapanışta ve kapanıştan dolar, emir defteri derinliği yok.';
+}
+function drawBacktest() {
+  if (!btLast) return;
+  const c = $('btChart'), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  if (!w || !h) return;
+  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  const g = c.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  const lines = btLast.results.map(function (r) { return { v: r.curve, col: css(BT_COLORS[r.name]), dash: false }; })
+    .concat([{ v: btLast.hold, col: css('--muted'), dash: true }]);
+  let lo = 10000, hi = 10000;
+  lines.forEach(function (L) { L.v.forEach(function (x) { if (x < lo) lo = x; if (x > hi) hi = x; }); });
+  const pad = (hi - lo) * 0.08 || 50; lo -= pad; hi += pad;
+  const N = btLast.hold.length;
+  const X = function (i) { return 8 + i * (w - 16) / (N - 1); }, Y = function (v) { return h - 8 - (v - lo) / (hi - lo) * (h - 24); };
+  g.setLineDash([2, 4]); g.strokeStyle = css('--line'); g.lineWidth = 1;
+  g.beginPath(); g.moveTo(8, Y(10000)); g.lineTo(w - 8, Y(10000)); g.stroke();
+  const step = Math.max(1, Math.floor(N / (w * 2)));
+  lines.forEach(function (L) {
+    g.setLineDash(L.dash ? [4, 3] : []); g.strokeStyle = L.col; g.lineWidth = L.dash ? 1 : 1.5;
+    g.beginPath();
+    for (let i = 0; i < N; i += step) { if (i) g.lineTo(X(i), Y(L.v[i])); else g.moveTo(X(i), Y(L.v[i])); }
+    g.lineTo(X(N - 1), Y(L.v[N - 1])); g.stroke();
+  });
+  g.setLineDash([]);
+  // Max / min equity labels on a backing plate so they stay readable over the lines.
+  g.font = '11px ' + css('--font-num');
+  [[money(hi - pad), 4], [money(lo + pad), h - 20]].forEach(function (L) {
+    const tw = g.measureText(L[0]).width;
+    g.globalAlpha = 0.85; g.fillStyle = css('--surface2'); g.fillRect(6, L[1], tw + 8, 16); g.globalAlpha = 1;
+    g.fillStyle = css('--muted'); g.fillText(L[0], 10, L[1] + 12);
+  });
+}
+$('btRun').addEventListener('click', runBacktest);
+function renderHealth() {
+  const age = q.bid != null ? (Date.now() - q.t) / 1000 : null;
+  const parts = [
+    'Veri: ' + (age == null ? 'yok' : num(age, 1) + ' sn önce'),
+    'Bar: ' + closes.length + (closes.length < warmFor($('strat').value) ? '/' + warmFor($('strat').value) : ''),
+    'Kesinti: ' + health.gaps,
+    'Yeniden bağlanma: ' + health.reconnects,
+    'Elenen sıçrama: ' + health.spikes
+  ];
+  if (health.seed) parts.push('Geçmiş barlar: ' + health.seed);
+  if (health.filterSkips) parts.push('Filtrelenen sinyal: ' + health.filterSkips);
+  if (health.wideSkips) parts.push('Geniş fark nedeniyle atlanan giriş: ' + health.wideSkips);
+  if (health.err && Date.now() - health.errT < 120000) parts.push('Son hata: ' + health.err);
+  $('health').textContent = 'Sağlık · ' + parts.join(' · ');
+  $('health').className = 'note' + (health.err && Date.now() - health.errT < 120000 ? ' warn' : '');
+}
+// Screen Wake Lock: keeps the phone screen on while this page is visible, so the agent keeps running.
+let wakeLock = null;
+function wantWake() { return $('wake').checked; }
+function requestWake() {
+  if (!wantWake() || document.hidden) return;
+  if (!('wakeLock' in navigator)) { $('wakeNote').textContent = 'Bu tarayıcı ekranı açık tutmayı desteklemiyor; telefonun otomatik kilitlenme süresini uzatabilirsin.'; $('wake').checked = false; return; }
+  navigator.wakeLock.request('screen').then(function (l) {
+    wakeLock = l; $('wakeNote').textContent = 'Ekran açık tutuluyor. Sekmeden çıkarsan ya da ekranı kendin kilitlersen yine durur.';
+    l.addEventListener('release', function () { wakeLock = null; });
+  }, function (e) { $('wakeNote').textContent = 'Ekran açık tutulamadı (' + (e && e.name || 'hata') + '). Telefonun otomatik kilitlenme süresini uzatabilirsin.'; $('wake').checked = false; });
+}
+$('wake').addEventListener('change', function () {
+  if (wantWake()) requestWake(); else if (wakeLock) { wakeLock.release(); wakeLock = null; $('wakeNote').textContent = 'Ekranı açık tutma kapalı.'; }
+});
+// The browser drops the lock when the page is hidden; take it again on return.
+document.addEventListener('visibilitychange', function () { if (!document.hidden && wantWake() && !wakeLock) requestWake(); });
+// ---------- Learning agent: model, applying it, keeping it current ----------
+const MODEL_KEY = 'metyu_model_v1', BAR_OF_TF = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400 };
+const RELEARN_EVERY = 6 * 3600e3, RETRY_AFTER = 3600e3;
+let model = null, learning = false;
+try { const m = JSON.parse(localStorage.getItem(MODEL_KEY) || 'null'); if (m && m.results && m.tf) model = m; } catch (e) { /* no saved model */ }
+function saveModel() { try { localStorage.setItem(MODEL_KEY, JSON.stringify(model)); } catch (e) { /* storage unavailable */ } }
+function modelDesc(ch) { return SNAME[ch.name] + ' (' + describeParams(ch.name, ch.prm) + (ch.filters ? ' · ' + filterLabel(ch.filters) : '') + (ch.pm ? ' · ' + pmLabel(ch.pm) : '') + ')'; }
+function modelActive() { return !!(model && model.use && model.sym === sym); }
+function modelWaiting() { return modelActive() && !model.chosen; }
+function activeStrat() { return modelActive() && model.chosen ? model.chosen.name : $('strat').value; }
+function activePrm() { return modelActive() && model.chosen ? model.chosen.prm : null; }
+function learn(reason) {
+  if (learning) return;
+  learning = true; $('lnRun').disabled = true;
+  const tf = reason === 'manual' ? $('lnTf').value : model.tf, n = reason === 'manual' ? +$('lnN').value : model.n;
+  const lev = +$('lev').value, symbol = sym;
+  if (model) model.lastTry = Date.now();
+  $('lnStatus').textContent = symbol + ' için ' + num(n, 0) + ' mum indiriliyor…';
+  fetchCandles(symbol, tf, n).then(function (res) {
+    const c = res.candles.filter(function (k) { return k.c > 0 && k.h >= k.l; });
+    if (c.length < 1000) throw new Error('yeterli mum gelmedi (' + c.length + ')');
+    $('lnStatus').textContent = 'Fonlama ve korku-açgözlülük geçmişi alınıyor…';
+    return fetchMarketHistory(symbol, c, TF_MS[tf]).then(function (mh) {
+      return walkForward(c, lev, TF_MS[tf], function (d, t) { $('lnStatus').textContent = 'Öğreniyor… %' + Math.round(d / t * 100) + ' (' + d + '/' + t + ' dilim)'; },
+        { fund: mh.fund, fng: mh.fng, depthUsd: md.depthUsd || DEPTH_DEFAULT[symbol] || 0 })
+        .then(function (wf) { return { wf: wf, venue: res.venue, mh: mh }; });
+    });
+  }).then(function (x) {
+    if (symbol !== sym) throw new Error('öğrenirken sembol değişti');
+    const prev = model, wf = x.wf;
+    model = { tf: tf, n: n, sym: symbol, lev: lev, venue: x.venue, learnedAt: Date.now(), span: wf.span,
+      results: wf.results.map(function (r) { return { name: r.name, prm: r.prm, ok: r.ok, weak: r.weak, oos: r.oos, base: r.base, filters: r.filters, filterEval: r.filterEval, pm: r.pm, pmEval: r.pmEval, plain: { ret: r.plain.ret, n: r.plain.n }, windowsWithVote: r.windowsWithVote }; }),
+      data: { funding: x.mh.fundSrc || null, fng: x.mh.fngSrc || null },
+      chosen: wf.chosen, use: prev ? prev.use && prev.sym === symbol : false, auto: $('lnAuto').checked, lastTry: Date.now(),
+      appliedAt: prev && prev.appliedAt, peakEq: prev && prev.peakEq };
+    const was = prev && prev.chosen ? modelDesc(prev.chosen) : 'bekleme';
+    const now = model.chosen ? modelDesc(model.chosen) : 'bekleme (güvenilir strateji yok)';
+    log(acct, (reason === 'manual' ? 'Öğrenme bitti' : 'Model yenilendi (' + reason + ')') + ': ' + (prev && reason !== 'manual' ? was + ' → ' : '') + now);
+    $('lnStatus').textContent = x.venue + ' · ' + symbol + ' · ' + num(wf.span.n, 0) + ' mum · ' + wf.span.folds + ' görülmemiş dilim, her biri ' + num(wf.span.testLen, 0) + ' mum';
+    if (model.use) applyModel(true);
+    saveModel(); renderLearn();
+  }).catch(function (e) {
+    $('lnStatus').textContent = 'Öğrenme yapılamadı (' + (e && e.message || 'hata') + ').' + (reason === 'manual' ? ' Bu görünüm dış sitelere bağlanmayı engelliyor olabilir; dosyayı tarayıcıda açıp tekrar dene.' : ' Mevcut model kullanılmaya devam ediyor; 1 saat sonra yeniden denenecek.');
+    if (reason !== 'manual') log(acct, 'Model yenilenemedi; mevcut modelle devam');
+    if (model) saveModel();
+  }).then(function () { learning = false; $('lnRun').disabled = false; });
+}
+// Point the agent at the model: its timeframe for the bars, its strategy and settings for the signals.
+function applyModel(quiet) {
+  if (!model) return;
+  const want = String(BAR_OF_TF[model.tf]);
+  if ($('bar').value !== want) { $('bar').value = want; $('bar').dispatchEvent(new Event('change')); }
+  if (model.chosen && model.chosen.name !== 'ens') $('strat').value = model.chosen.name;
+  $('strat').disabled = true; stState = { cur: null }; blocked = null;
+  model.appliedAt = Date.now(); model.peakEq = equity(acct);
+  if (!quiet) log(acct, 'Ajan öğrenilen modele geçti: ' + (model.chosen ? modelDesc(model.chosen) : 'güvenilir strateji yok, bekliyor'));
+  saveModel();
+}
+$('lnRun').addEventListener('click', function () { learn('manual'); });
+$('lnUse').addEventListener('change', function () {
+  if (!model) { $('lnUse').checked = false; return; }
+  model.use = $('lnUse').checked;
+  if (model.use) applyModel(false); else { $('strat').disabled = false; log(acct, 'Ajan öğrenilen modeli bıraktı; seçili stratejiyle devam'); saveModel(); }
+  render();
+});
+$('lnAuto').addEventListener('change', function () { if (model) { model.auto = $('lnAuto').checked; saveModel(); } renderLearn(); });
+// Keeping current: relearn every RELEARN_EVERY, or sooner when the model does badly live (8+ trades with profit
+// factor under 0.8, or 6% below the best equity since it was applied). At most one attempt per RETRY_AFTER.
+function liveCheck() {
+  if (!model || learning) return;
+  if (model.use && model.sym !== sym) { model.use = false; $('strat').disabled = false; log(acct, 'Sembol değişti; öğrenilen model ' + model.sym + ' için, kullanım kapatıldı'); saveModel(); return; }
+  if (!model.auto || model.sym !== sym) return;
+  const now = Date.now();
+  if (now - (model.lastTry || 0) < RETRY_AFTER) return;
+  let why = now - model.learnedAt > RELEARN_EVERY ? 'süresi doldu' : null;
+  if (!why && model.use && model.chosen && model.appliedAt) {
+    const e = equity(acct); model.peakEq = Math.max(model.peakEq || e, e);
+    const tr = (acct.history || []).filter(function (h) { return h.tClose >= model.appliedAt; });
+    let gw = 0, gl = 0; tr.forEach(function (h) { if (h.pnl > 0) gw += h.pnl; else gl -= h.pnl; });
+    if (tr.length >= 8 && (gl > 0 ? gw / gl : 9) < 0.8) why = 'canlıda kâr faktörü düştü';
+    else if ((model.peakEq - e) / model.peakEq > 0.06) why = 'canlıda %6 geriledi';
+  }
+  if (why) learn(why);
+}
+setInterval(function () { safely('öğrenme', liveCheck); }, 60000);
+function renderLearn() {
+  $('lnUse').disabled = !model || model.sym !== sym;
+  $('lnUse').checked = modelActive();
+  $('lnAuto').checked = model ? model.auto !== false : $('lnAuto').checked;
+  $('strat').disabled = modelActive();
+  if (!model) { $('lnOut').hidden = true; $('lnModel').textContent = 'Henüz model yok. "Öğren" ile başlat; birkaç saniye sürer.'; return; }
+  $('lnOut').hidden = false;
+  const body = $('lnBody'); body.textContent = '';
+  model.results.slice().sort(function (x, y) { return y.oos.ret - x.oos.ret; }).forEach(function (r) {
+    const tr = document.createElement('tr'); if (model.chosen && model.chosen.name === r.name) tr.className = 'sel';
+    const pf = r.oos.pf === Infinity || r.oos.pf === null ? '∞' : num(r.oos.pf, 2);
+    const cells = [
+      [SNAME[r.name] + (r.ok ? ' ✓' : ''), [describeParams(r.name, r.prm), r.filters ? '+ ' + filterLabel(r.filters) : '', r.pm ? '+ ' + pmLabel(r.pm) : ''], null],
+      [pct(r.oos.ret, 1), [r.oos.n + ' işlem · kâr\u00a0f.\u00a0' + pf, 'düşüş ' + pct(r.oos.maxDD, 0) + (r.oos.folds ? ' · ' + r.oos.posFolds + '/' + r.oos.folds + ' dilim kârlı' : '')], r.oos.ret],
+      r.name === 'ens' ? ['–', [r.windowsWithVote != null ? r.windowsWithVote + '/' + model.span.folds + ' dilimde oylama kurulabildi' : ''], null]
+        : [pct(r.plain.ret, 1), [r.plain.n != null ? r.plain.n + ' işlem' : ''], r.plain.ret]
+    ];
+    cells.forEach(function (c) {
+      const td = document.createElement('td'); td.textContent = c[0];
+      if (c[2] != null) td.className = c[2] >= 0 ? 'up' : 'down';
+      c[1].forEach(function (t) { if (!t) return; const sm = document.createElement('small'); sm.textContent = t; td.appendChild(sm); });
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+  const age = Math.round((Date.now() - model.learnedAt) / 60000);
+  const fe = model.chosen && model.chosen.filters ? (model.results.find(function (r) { return r.name === model.chosen.name; }) || {}).filterEval : null;
+  const fRow = fe ? fe.find(function (e) { return e.key === filterKey(model.chosen.filters); }) : null;
+  const dataLine = model.data ? 'Piyasa verisi: fonlama ' + (model.data.funding || 'alınamadı') + ', korku-açgözlülük ' + (model.data.fng || 'alınamadı') + '. ' : '';
+  $('lnVerdict').textContent = dataLine + (model.chosen
+    ? 'Seçilen: ' + modelDesc(model.chosen) + '. ' + (fRow ? 'Filtre, görmediği ' + model.span.folds + ' dilimin ' + fRow.foldWins + '\'inde filtresizden iyi, ' + fRow.foldLosses + '\'inde kötü çıktığı için benimsendi. ' : '')
+    : 'Hiçbir strateji görmediği veride güven eşiğini geçemedi; model kullanılırsa ajan yeni işlem açmaz. Bu kötü bir sonuç değil: avantaj yokken işlem yapmamak para kaybettirmez. ') +
+    '✓ = güvenilir: görmediği veride en az ' + WF.minOosTrades + ' işlem, kârda, kâr faktörü ' + num(WF.minPf, 1) + ' üstü, düşüş %' + (WF.maxDD * 100) + ' altı ve ' + WF.folds + ' dilimin en az ' + WF.minPosFolds + '\'ünde kârlı. ' +
+    'Oylama: her dilimde yalnızca eğitim verisinde iyi olan 2–3 strateji üye olur, çoğunluk aynı yönü gösterince işlem açılır; ek bir aday olduğu için daha yüksek eşik uygulanır (kâr faktörü ' + num(WF.votePf, 1) + ', ' + WF.votePosFolds + '/' + WF.folds + ' dilim) ve en iyi tek stratejiden belirgin şekilde iyi değilse daha basit olan tek strateji seçilir. Tek stratejilerin "görmediği veride" sonucu, altı aday arasından bu sonuca bakılarak seçildikleri için biraz iyimserdir; oylamanınki bu yanlılığı taşımaz. ' +
+    '"Varsayılan ayarla" sütunu öğrenmenin işe yarayıp yaramadığını gösterir. Takip eden stop ve kısmi kâr da aynı dilimlerde sınanır ve aynı kuralla benimsenir. Bir filtre yalnızca dilimlerin çoğunda tutarlı iyileşme sağlarsa benimsenir; yine de iyileşme filtrenin bilgisinden değil, işlem sayısını azaltmasından gelebilir. Geçmişte işe yarayan ayar gelecekte de işe yarayacak diye bir garanti yok.';
+  let line = 'Model: ' + model.sym + ' · ' + ($('lnTf').querySelector('option[value="' + model.tf + '"]') || {}).textContent + ' · ' +
+    (age < 60 ? age + ' dk' : Math.round(age / 60) + ' saat') + ' önce öğrenildi (' + model.venue + ', ' + model.lev + 'x).';
+  if (model.sym !== sym) line += ' Bu model başka sembol için; kullanmak için ' + sym + ' ile yeniden öğren.';
+  if (modelActive() && model.appliedAt) {
+    const tr = (acct.history || []).filter(function (h) { return h.tClose >= model.appliedAt; });
+    const pnl = tr.reduce(function (a, h) { return a + h.pnl; }, 0);
+    line += ' Uygulandığından beri ' + tr.length + ' işlem, K/Z ' + signed(pnl) + '.';
+  }
+  if (model.auto !== false) line += ' 6 saatte bir ya da canlıda performans bozulursa kendini yeniden öğrenir.';
+  $('lnModel').textContent = line;
+}
+// ---------- Live market data: funding, open interest, Fear & Greed, large trades ----------
+// var, not let: resetShadows() runs during start-up, before this point, and reads it through applyLiveFunding().
+var md = { funding: null, fundSrc: null, nextFunding: null, oi: null, oiUsd: null, oiChg: null, oiSamples: [], fundT: 0,
+  fng: null, fngLabel: null, fngT: 0, whales: [], whaleSrc: null, whaleT: 0, err: {} };
+const FNG_TR = { 'Extreme Fear': 'aşırı korku', 'Fear': 'korku', 'Neutral': 'nötr', 'Greed': 'açgözlülük', 'Extreme Greed': 'aşırı açgözlülük' };
+const WHALE_USD = { BTCUSDT: 500000, ETHUSDT: 250000, SOLUSDT: 100000 };
+// Every account pays the exchange's current funding (default 0.01% / 8 h until it is known).
+function applyLiveFunding() {
+  const f = typeof md !== 'undefined' && md && md.funding != null ? md.funding : 0.0001;
+  if (typeof acct !== 'undefined' && acct) acct.fund = f;
+  if (shadows) STRATS.forEach(function (k) { shadows[k].a.fund = f; });
+}
+function pollFunding() {
+  const symbol = sym;
+  const binance = Promise.all([
+    getJson('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=' + symbol),
+    getJson('https://fapi.binance.com/fapi/v1/openInterest?symbol=' + symbol),
+    getJson('https://fapi.binance.com/futures/data/openInterestHist?symbol=' + symbol + '&period=5m&limit=13').catch(function () { return null; })
+  ]).then(function (r) {
+    const f = +r[0].lastFundingRate, oi = +r[1].openInterest, mark = +r[0].markPrice;
+    if (!isFinite(f) || !isFinite(oi)) throw new Error('beklenmeyen yanıt');
+    let chg = null;
+    if (Array.isArray(r[2]) && r[2].length > 1) { const a = +r[2][0].sumOpenInterest, b = +r[2][r[2].length - 1].sumOpenInterest; if (a > 0) chg = b / a - 1; }
+    return { funding: f, next: +r[0].nextFundingTime || null, oi: oi, oiUsd: oi * mark, chg: chg, src: 'Binance vadeli' };
+  });
+  const hl = function () {
+    const coin = symbol.replace(/USDT$/, '');
+    return getJson('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'metaAndAssetCtxs' }) })
+      .then(function (r) {
+        const i = r[0].universe.findIndex(function (u) { return u.name === coin; }), c = r[1][i];
+        if (i < 0 || !c) throw new Error('coin yok');
+        const now = Date.now();
+        return { funding: +c.funding * 8, next: Math.ceil(now / 3600e3) * 3600e3, oi: +c.openInterest, oiUsd: +c.openInterest * +c.markPx, chg: null, src: 'Hyperliquid' };
+      });
+  };
+  binance.catch(function (e) { md.err.funding = 'Binance: ' + (e && e.message || 'hata'); return hl(); }).then(function (x) {
+    if (symbol !== sym) return;
+    // Open-interest change over ~1 h from our own samples when the source gives no history.
+    md.oiSamples.push({ t: Date.now(), oi: x.oi }); md.oiSamples = md.oiSamples.filter(function (o) { return Date.now() - o.t <= 3700e3; });
+    if (x.chg == null && md.oiSamples.length > 1 && Date.now() - md.oiSamples[0].t > 50 * 60e3) x.chg = x.oi / md.oiSamples[0].oi - 1;
+    md.funding = x.funding; md.nextFunding = x.next; md.oi = x.oi; md.oiUsd = x.oiUsd; md.oiChg = x.chg; md.fundSrc = x.src; md.fundT = Date.now();
+    delete md.err.funding; applyLiveFunding();
+  }).catch(function (e) { md.err.funding = (md.err.funding ? md.err.funding + ' · ' : '') + 'Hyperliquid: ' + (e && e.message || 'hata'); })
+    .then(requestRender);
+}
+// Order book every 30 s: every account fills its orders by walking it (see slipFor). Also gives the ±1% depth.
+function parseBook(bids, asks) {
+  const top = function (rows) { return rows.slice(0, 200).map(function (r) { return [+r[0], +r[1]]; }).filter(function (r) { return r[0] > 0 && r[1] > 0; }); };
+  return { bids: top(bids), asks: top(asks), t: Date.now() };
+}
+function bandUsd(levels, best, dir) { let u = 0; levels.forEach(function (l) { if (dir * (l[0] / best - 1) <= 0.01) u += l[0] * l[1]; }); return u; }
+function applyBook(book) {
+  [acct].concat(shadows ? STRATS.map(function (k) { return shadows[k].a; }) : []).forEach(function (a) { a.book = book; });
+}
+function pollDepth() {
+  const symbol = sym;
+  getJson('https://api.binance.com/api/v3/depth?symbol=' + symbol + '&limit=500').then(function (d) {
+    if (!d || !Array.isArray(d.bids)) throw new Error('beklenmeyen yanıt');
+    return { book: parseBook(d.bids, d.asks), src: 'Binance' };
+  }).catch(function () {
+    return getJson('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'l2Book', coin: symbol.replace(/USDT$/, '') }) })
+      .then(function (d) { const lv = hlLevels(d); if (!lv) throw new Error('beklenmeyen yanıt'); return { book: parseBook(lv[0].map(function (l) { return [l.px, l.sz]; }), lv[1].map(function (l) { return [l.px, l.sz]; })), src: 'Hyperliquid' }; });
+  }).then(function (x) {
+    if (symbol !== sym || !x.book.bids.length || !x.book.asks.length) return;
+    md.depthBid = bandUsd(x.book.bids, x.book.bids[0][0], -1); md.depthAsk = bandUsd(x.book.asks, x.book.asks[0][0], 1);
+    md.depthUsd = Math.min(md.depthBid, md.depthAsk); md.depthSrc = x.src; md.depthT = Date.now(); delete md.err.depth;
+    applyBook(x.book);
+  }).catch(function (e) { md.err.depth = e && e.message || 'hata'; })
+    .then(function () { if (md.depthT && Date.now() - md.depthT > 120000) applyBook(null); }); // too old to trust: back to the floor
+}
+function pollFng() {
+  getJson('https://api.alternative.me/fng/?limit=1&format=json').then(function (d) {
+    const r = d && d.data && d.data[0];
+    if (!r) throw new Error('boş yanıt');
+    md.fng = +r.value; md.fngLabel = FNG_TR[r.value_classification] || r.value_classification; md.fngT = Date.now(); delete md.err.fng;
+  }).catch(function (e) { md.err.fng = e && e.message || 'hata'; }).then(requestRender);
+}
+// Large trades: market orders split into several fills are merged (same side, within 150 ms) before the size check.
+let whaleConn = null, whalePending = null, whaleIdx = 0, whaleLastMsg = 0, whaleTimer = null, whaleLastId = null;
+function flushWhale() {
+  const w = whalePending; whalePending = null;
+  if (w && w.usd >= (WHALE_USD[sym] || 250000)) {
+    md.whales.push({ t: w.t, side: w.side, usd: w.usd, px: w.pxq / w.q });
+    md.whales = md.whales.filter(function (x) { return Date.now() - x.t <= 2 * 3600e3; }).slice(-200);
+  }
+}
+function onTrade(px, q, side, t) {
+  whaleLastMsg = Date.now();
+  if (!(px > 0) || !(q > 0)) return;
+  if (whalePending && (whalePending.side !== side || t - whalePending.t > 150)) flushWhale();
+  if (!whalePending) whalePending = { side: side, t: t, usd: 0, q: 0, pxq: 0 };
+  whalePending.usd += px * q; whalePending.q += q; whalePending.pxq += px * q;
+}
+const WHALE_FEEDS = [
+  { name: 'Binance', open: function (symbol) {
+      const w = new WebSocket('wss://stream.binance.com:9443/ws/' + symbol.toLowerCase() + '@aggTrade');
+      w.onmessage = function (e) { try { const d = JSON.parse(e.data); onTrade(+d.p, +d.q, d.m ? 'sell' : 'buy', +d.T); } catch (err) { /* ignore */ } };
+      return { close: function () { w.onclose = null; w.close(); } }; } },
+  { name: 'Hyperliquid', open: function (symbol) {
+      const w = new WebSocket('wss://api.hyperliquid.xyz/ws');
+      w.onopen = function () { w.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'trades', coin: symbol.replace(/USDT$/, '') } })); };
+      w.onmessage = function (e) { try { const d = JSON.parse(e.data); if (d.channel === 'trades') d.data.forEach(function (x) { onTrade(+x.px, +x.sz, x.side === 'B' ? 'buy' : 'sell', +x.time); }); } catch (err) { /* ignore */ } };
+      return { close: function () { w.onclose = null; w.close(); } }; } },
+  { name: 'Binance (HTTP)', open: function (symbol) {
+      whaleLastId = null;
+      const run = function () {
+        getJson('https://api.binance.com/api/v3/aggTrades?symbol=' + symbol + (whaleLastId != null ? '&fromId=' + (whaleLastId + 1) + '&limit=1000' : '&limit=500')).then(function (rows) {
+          if (!Array.isArray(rows)) return;
+          whaleLastMsg = Date.now();
+          rows.forEach(function (d) { if (whaleLastId == null || d.a > whaleLastId) { onTrade(+d.p, +d.q, d.m ? 'sell' : 'buy', +d.T); whaleLastId = d.a; } });
+        }).catch(function () { /* next poll */ });
+      };
+      run(); const h = setInterval(run, 5000);
+      return { close: function () { clearInterval(h); } }; } }
+];
+function connectWhales(idx) {
+  clearTimeout(whaleTimer);
+  try { if (whaleConn) whaleConn.close(); } catch (e) { /* ignore */ }
+  whaleConn = null; whaleIdx = idx || 0;
+  if (whaleIdx >= WHALE_FEEDS.length) { md.whaleSrc = null; md.err.whale = 'hiçbir kaynağa bağlanılamadı; 1 dk sonra yeniden denenecek'; whaleTimer = setTimeout(function () { connectWhales(0); }, 60000); return; }
+  const started = Date.now(), symbol = sym;
+  try { whaleConn = WHALE_FEEDS[whaleIdx].open(symbol); } catch (e) { whaleConn = null; }
+  // No trade within 8 s: next source. Once flowing, 60 s of silence restarts from the first source.
+  whaleTimer = setTimeout(function check() {
+    if (symbol !== sym) return;
+    if (whaleLastMsg >= started) {
+      md.whaleSrc = WHALE_FEEDS[whaleIdx].name; delete md.err.whale;
+      if (Date.now() - whaleLastMsg > 60000) { connectWhales(0); return; }
+      whaleTimer = setTimeout(check, 10000); return;
+    }
+    connectWhales(whaleIdx + 1);
+  }, 8000);
+}
+function whaleFlow(ms) {
+  const now = Date.now(); let b = 0, sl = 0;
+  md.whales.forEach(function (w) { if (now - w.t <= ms) { if (w.side === 'buy') b += w.usd; else sl += w.usd; } });
+  return { buy: b, sell: sl, net: b - sl };
+}
+function usdShort(v) { const a = Math.abs(v); if (a < 500) return '$0'; return (v < 0 ? '-' : '') + '$' + (a >= 1e9 ? num(a / 1e9, 2) + ' mr' : a >= 1e6 ? num(a / 1e6, 2) + ' mn' : num(a / 1e3, 0) + ' bin'); }
+function ago(t) { const s = Math.round((Date.now() - t) / 1000); return s < 60 ? s + ' sn önce' : Math.round(s / 60) + ' dk önce'; }
+function renderMarket() {
+  if (whalePending && Date.now() - whalePending.t > 1000) flushWhale();
+  const rows = [], box = $('mkt'); box.textContent = '';
+  if (md.funding != null) {
+    const f = md.funding, tag = f >= FILTER.fundHi ? 'longlar çok kalabalık' : f >= 0.0002 ? 'longlar kalabalık' : f <= FILTER.fundLo ? 'shortlar çok kalabalık' : f < 0 ? 'shortlar ödüyor' : 'normal';
+    rows.push(['Fonlama (8 saat)', (f >= 0 ? '+' : '-') + '%' + num(Math.abs(f) * 100, 4) + ' · ' + tag, f >= FILTER.fundHi || f <= FILTER.fundLo ? 'warn' : '']);
+    if (md.nextFunding) rows.push(['Sonraki fonlama', Math.max(0, Math.round((md.nextFunding - Date.now()) / 60000)) + ' dk sonra', '']);
+    rows.push(['Açık pozisyon', usdShort(md.oiUsd) + (md.oiChg != null ? ' · 1 saatte ' + (md.oiChg >= 0 ? '+' : '') + pct(md.oiChg, 2) : ''), '']);
+  } else rows.push(['Fonlama / açık pozisyon', md.err.funding ? 'alınamadı' : 'yükleniyor…', '']);
+  rows.push(['Derinlik (±%1)', md.depthUsd ? usdShort(md.depthBid) + ' alış · ' + usdShort(md.depthAsk) + ' satış' : (md.err.depth ? 'alınamadı' : 'yükleniyor…'), '']);
+  rows.push(['Korku-açgözlülük', md.fng != null ? md.fng + ' · ' + md.fngLabel : (md.err.fng ? 'alınamadı' : 'yükleniyor…'), md.fng != null && (md.fng >= FILTER.fngHi || md.fng <= FILTER.fngLo) ? 'warn' : '']);
+  const f15 = whaleFlow(15 * 60e3), f60 = whaleFlow(3600e3);
+  rows.push(['Balina akışı 15 dk', md.whaleSrc ? usdShort(f15.net) + ' net (' + usdShort(f15.buy) + ' alış / ' + usdShort(f15.sell) + ' satış)' : '—', md.whaleSrc ? (f15.net > 0 ? 'up' : f15.net < 0 ? 'down' : '') : '']);
+  rows.push(['Balina akışı 1 saat', md.whaleSrc ? usdShort(f60.net) + ' net' : '—', md.whaleSrc ? (f60.net > 0 ? 'up' : f60.net < 0 ? 'down' : '') : '']);
+  rows.forEach(function (x) {
+    const row = document.createElement('div'), a = document.createElement('span'), b = document.createElement('span');
+    a.textContent = x[0]; b.textContent = x[1]; if (x[2]) b.className = x[2]; row.appendChild(a); row.appendChild(b); box.appendChild(row);
+  });
+  const ul = $('whales'); ul.textContent = '';
+  const list = md.whales.slice(-8).reverse();
+  if (!list.length) { const li = document.createElement('li'); li.textContent = md.whaleSrc ? 'Son 2 saatte ' + usdShort(WHALE_USD[sym] || 250000) + ' üstü işlem yok.' : (md.err.whale || 'İşlem akışına bağlanılıyor…'); ul.appendChild(li); }
+  list.forEach(function (w) {
+    const li = document.createElement('li'), t = document.createElement('time'), sp = document.createElement('span');
+    t.textContent = clock(w.t); sp.textContent = (w.side === 'buy' ? 'ALIŞ ' : 'SATIŞ ') + usdShort(w.usd) + ' @ ' + num(w.px, digits(w.px)); sp.className = w.side === 'buy' ? 'up' : 'down';
+    li.appendChild(t); li.appendChild(sp); ul.appendChild(li);
+  });
+  const fl = modelActive() && model.chosen ? model.chosen.filters : null;
+  $('mktNote').textContent = 'Kaynaklar: ' + (md.fundSrc || '—') + (md.fundT ? ' (' + ago(md.fundT) + ')' : '') + ', alternative.me' + (md.fngT ? ' (' + ago(md.fngT) + ')' : '') + ', işlemler ' + (md.whaleSrc || '—') + '. ' +
+    'Balina eşiği: tek emirde ' + usdShort(WHALE_USD[sym] || 250000) + ' ve üstü. ' +
+    (fl ? 'Ajan şu an canlı ' + filterLabel(fl) + ' uyguluyor. ' : 'Ajan şu an piyasa filtresi uygulamıyor; filtreler yalnızca öğrenici görmediği veride işe yaradığını gösterirse devreye girer. ') +
+    'Balina akışı bilgi amaçlıdır: ücretsiz geçmiş verisi olmadığından sınanamıyor, bu yüzden ajanın kararına katılmıyor.';
+}
+pollFunding(); pollFng(); pollDepth(); connectWhales(0);
+setInterval(pollDepth, 30000);
+setInterval(pollFunding, 60000); setInterval(pollFng, 30 * 60000);
+function renderCmp() {
+  const body = $('cmpBody'); body.textContent = '';
+  const cur = $('strat').value;
+  STRATS.forEach(function (k) {
+    const a = shadows[k].a, e = equity(a), pnl = e - a.start, n = a.closed.length;
+    const wins = a.closed.filter(function (x) { return x > 0; }).length;
+    const tr = document.createElement('tr'); if (k === cur) tr.className = 'sel';
+    const cells = [
+      [SNAME[k], a.halt ? haltShort(a.halt) : a.pos ? (a.pos.side === 'long' ? 'long açık' : 'short açık') : ''],
+      [signed(pnl), pct(pnl / a.start, 2)],
+      [String(a.trades), ''],
+      [n ? pct(wins / n, 0) : '–', ''],
+      [pct(a.maxDD, 2), '']
+    ];
+    cells.forEach(function (c, i) {
+      const td = document.createElement('td'); td.textContent = c[0];
+      if (i === 1) td.className = pnl >= 0 ? 'up' : 'down';
+      if (c[1]) { const sm = document.createElement('small'); sm.textContent = c[1]; td.appendChild(sm); }
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+  const mins = Math.floor((Date.now() - shadowSince) / 60000);
+  $('cmpNote').textContent = (closes.length < MAX_WARM ? 'Bazı stratejiler ısınıyor (' + closes.length + '/' + MAX_WARM + ' bar; RSI + trend en uzun ısınan). ' : '') +
+    'Hepsi aynı fiyatlarla, aynı kaldıraç ve risk kurallarıyla, ayrı 10.000 USDT sanal hesaplarda otomatik işlem yapıyor; ' + mins + ' dakikadır çalışıyor. ' +
+    'Ana hesabın sonucu elle işlemler ve ajan anahtarı yüzünden farklı olabilir. Karşılaştırma sayfa yenilense de sürer; ara 5 dakikayı aşarsa hesaplar korunur, stratejiler yeniden ısınır. Kaynak ya da sembol değişince veya hesap sıfırlanınca baştan başlar. ' +
+    'Kısa sürede çıkan fark çoğunlukla şanstır; ancak saatler süren ve birçok işlem içeren sonuç bir şey söyler.';
+}
+
+$('sym').addEventListener('change', function () {
+  sym = $('sym').value;
+  btLast = null; $('btOut').hidden = true; $('btStatus').textContent = '';
+  setTimeout(function () { safely('öğrenme', liveCheck); }, 0);
+  md.funding = null; md.oi = null; md.oiChg = null; md.oiSamples = []; md.whales = []; md.whaleSrc = null; whalePending = null; md.err = {};
+  applyLiveFunding(); pollFunding(); connectWhales(0);
+  if (acct.pos && q.bid != null) closePos(acct, acct.pos.side === 'long' ? q.bid : q.ask, 'SEMBOL DEĞİŞTİ');
+  everLive = false; src = 'connecting'; q = { bid: null, ask: null, t: 0 }; series = []; resetBars();
+  demoMid = BASE[sym]; demoDrift = 0; connectLive(); render();
+});
+function toCsv() {
+  // Semicolon-separated with decimal commas, so Turkish Excel/Sheets opens it into columns.
+  const n = function (v, d) { return v == null ? '' : num(v, d).replace(/\./g, ''); };
+  const ts = function (t) { return t ? new Date(t).toLocaleString('tr-TR') : ''; };
+  const rows = [['açılış', 'kapanış', 'yön', 'giriş', 'çıkış', 'stop', 'miktar', 'kaldıraç', 'maliyet', 'fonlama', 'K/Z', 'neden', 'kaynak'].join(';')];
+  (acct.history || []).forEach(function (h) {
+    rows.push([ts(h.tOpen), ts(h.tClose), h.side === 'long' ? 'long' : 'short', n(h.entry, 4), n(h.exit, 4), n(h.stop, 4),
+      n(h.qty, 6), h.lev, n(h.costs, 2), n(h.funding, 2), n(h.pnl, 2), h.reason, h.src].join(';'));
+  });
+  return rows.join('\n');
+}
+$('bCsv').addEventListener('click', function () {
+  const box = $('csvBox'), msg = $('csvMsg'), text = toCsv(), count = (acct.history || []).length;
+  if (!count) { msg.textContent = 'Henüz kapanmış işlem yok.'; box.hidden = true; return; }
+  const showBox = function () { box.value = text; box.hidden = false; box.focus(); box.select(); msg.textContent = 'Kopyalanamadı; metni seçip kopyala.'; };
+  try {
+    navigator.clipboard.writeText(text).then(function () { msg.textContent = count + ' işlem kopyalandı.'; box.hidden = true; }, showBox);
+  } catch (e) { showBox(); }
+});
+$('lev').addEventListener('input', function () { $('levV').textContent = $('lev').value + 'x'; });
+$('bar').addEventListener('change', function () {
+  if (modelActive() && $('bar').value !== String(BAR_OF_TF[model.tf])) { model.use = false; $('strat').disabled = false; saveModel(); log(acct, 'Bar süresi modelinkinden farklı; öğrenilen model kullanımı kapatıldı'); }
+  barIdx = null; resetBars(); log(acct, 'Bar süresi ' + $('bar').selectedOptions[0].textContent + ' oldu: barlar ve karşılaştırma yeniden başlıyor'); restartBars(); trySeed(); saveState(); render(); });
+$('auto').addEventListener('change', render);
+$('bLong').addEventListener('click', function () { manual('long'); });
+$('bShort').addEventListener('click', function () { manual('short'); });
+$('bClose').addEventListener('click', function () {
+  $('err').textContent = '';
+  if (!acct.pos) { $('err').textContent = 'Kapatılacak pozisyon yok.'; return; }
+  closePos(acct, fillPrice(acct.pos.side, true), 'Elle'); render();
+});
+$('bReset').addEventListener('click', function () { acct = makeAccount(); blocked = null; stState = { cur: null }; resetShadows(); $('err').textContent = ''; saveState(); render(); });
+$('strat').addEventListener('change', function () { stState = { cur: null }; blocked = null; saveState(); render(); renderBacktest(); });
+window.addEventListener('resize', function () { drawChart(); drawEquity(); drawBacktest(); });
+setInterval(function () { if (q.bid != null && fresh()) sampleEquity(false); safely('ekran', render); }, 1000);
+
+if (saved) {
+  if (['BTCUSDT', 'ETHUSDT', 'SOLUSDT'].indexOf(saved.sym) >= 0) { sym = saved.sym; $('sym').value = sym; demoMid = saved.demoMid > 0 ? saved.demoMid : BASE[sym]; }
+  if (STRATS.indexOf(saved.strat) >= 0) $('strat').value = saved.strat;
+  if (saved.barLen && [].some.call($('bar').options, function (o) { return o.value === String(saved.barLen); })) $('bar').value = String(saved.barLen);
+  // Restore the comparison accounts (same symbol only), and stage the saved bars for setSource.
+  const okAcct = function (a) { return a && typeof a.cash === 'number' && Array.isArray(a.closed); };
+  if (saved.cmp && saved.cmp.shadows && STRATS.every(function (k) { return saved.cmp.shadows[k] && okAcct(saved.cmp.shadows[k].a); })) {
+    STRATS.forEach(function (k) { const x = saved.cmp.shadows[k]; shadows[k] = { a: x.a, st: x.st || { cur: null }, blocked: x.blocked || null, lastSide: x.lastSide || null }; });
+    shadowSince = saved.cmp.since || Date.now();
+  }
+  if (saved.bars && Array.isArray(saved.bars.closes) && (saved.bars.src === 'live' || saved.bars.src === 'demo')) pending = saved.bars;
+  log(acct, 'Önceki hesap geri yüklendi' + (acct.pos ? '; açık pozisyonun stopu sayfa kapalıyken izlenemedi, ilk fiyatta kontrol edilir' : ''));
+}
+if (stateBroken) log(acct, 'UYARI: önceki kayıt okunamadı; kopyası saklandı, yeni sanal hesapla başlandı');
+if (modelActive()) { $('bar').value = String(BAR_OF_TF[model.tf]); if (model.chosen && model.chosen.name !== 'ens') $('strat').value = model.chosen.name; $('strat').disabled = true; }
+if (model) { $('lnTf').value = model.tf; $('lnN').value = String(model.n); }
+setInterval(saveState, 3000);
+document.addEventListener('visibilitychange', function () { if (document.hidden) saveState(); });
+connectLive(); restartBars(); render();
+})();
+</script>

@@ -1,0 +1,9 @@
+{
+  "name": "metyu",
+  "version": "1.0.0",
+  "private": true,
+  "description": "metyu: kripto paper-trading portf\u00f6y ajan\u0131 (sanal para)",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node metyu-runner.mjs" }
+}

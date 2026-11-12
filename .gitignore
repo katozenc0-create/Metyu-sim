@@ -1,0 +1,7 @@
+# Files the runner writes while it runs (local state, logs, secrets)
+metyu-state*.json
+metyu-log.txt
+metyu-trades.csv
+metyu-telegram.json
+metyu.lock
+raporlar/
