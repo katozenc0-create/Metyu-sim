@@ -13,7 +13,7 @@ Kullanıcı Claude kontörünün tutumlu harcanmasını istiyor.
 ## Harita
 - `simulator.html`: sayfa + ortak motor. `// ENGINE-START … ENGINE-END` (hesap, emir, stratejiler, göstergeler, filtreler) ve `// SHARED-START … SHARED-END` (mum çekme, backtest, walk-forward öğrenici, `WF` eşikleri).
 - `metyu-runner.mjs`: 7/24 sanal portföy; motoru `simulator.html`'den yükler. Bölümler `// ----------` başlıklarıyla ayrılı (durum, portföy riski, fiyat akışı, ajan, öğrenme, rapor, Telegram, durum sayfası).
-- `test/karar.mjs`: ağsız karar testi. `test/baglanti.mjs`, `arastirma/arastirma.mjs`: gerçek veri ister (yalnızca GitHub'da çalışır).
+- `test/karar.mjs`: ağsız karar testi. `test/ajan.mjs` + `test/sahte-borsa.mjs`: sahte borsayla çalıştırıcı testi (~3 dk). `kontrol/saglik.mjs` (yalnızca `Metyu-sim`): 30 dakikalık sağlık kontrolü, kurallar `TAKIP.md`'de. `test/baglanti.mjs`, `arastirma/arastirma.mjs`: gerçek veri ister (yalnızca GitHub'da çalışır).
 - `.github/workflows/`: `karar-testi` (her değişiklik), `canli-test` (push 12 dk, elle 40 dk), `arastirma`.
 
 ## Kurallar

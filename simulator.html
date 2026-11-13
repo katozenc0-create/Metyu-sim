@@ -1610,11 +1610,14 @@ function walkForward(candles, lev, tfMs, onProgress, ext) {
           const pmRuns = Object.assign({ '-': per[name].byF[fc.adoptKey] }, per[name].byPm);
           const pc = pickVariant('-', pmRuns, ['-'].concat(pms.map(pmKey)));
           const pm = pc.adoptKey === '-' ? null : pms.find(function (x) { return pmKey(x) === pc.adoptKey; });
+          // A filter or position-management variant is picked on the unseen windows themselves, so it may improve a
+          // strategy but must not be what makes it pass: the plain strategy has to be trusted on its own too.
+          const sound = trusted(pc.adoptO) && trusted(fc.baseO);
           // Live settings: tuned on the latest training-sized window.
           const latest = pickParams(name, candles, lev, tfMs, N - trainLen, N, ext);
           latestPicks[name] = latest;
           return { name: name, oos: pc.adoptO, base: fc.baseO, plain: chainOos(per[name].plain), prm: latest.prm, weak: latest.weak,
-            filters: fc.fl, pm: pm, ok: trusted(pc.adoptO), strong: trusted(pc.adoptO) && pc.adoptO.t >= WF.strongT, filterEval: fc.evals, pmEval: pc.evals };
+            filters: fc.fl, pm: pm, ok: sound, strong: sound && pc.adoptO.t >= WF.strongT, filterEval: fc.evals, pmEval: pc.evals };
         });
         // Strong evidence first, then return / drawdown.
         const ok = results.filter(function (r) { return r.ok; }).sort(function (x, y) { return (y.strong - x.strong) || (wfScore(y.oos) - wfScore(x.oos)); });

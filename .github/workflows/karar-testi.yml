@@ -4,7 +4,7 @@ name: Karar testi
 on:
   push:
     branches: [main]
-    paths: ['simulator.html', 'metyu-runner.mjs', 'test/karar.mjs', '.github/workflows/**']
+    paths: ['simulator.html', 'metyu-runner.mjs', 'test/**', '.github/workflows/**']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -27,3 +27,5 @@ jobs:
         run: node --check metyu-runner.mjs
       - name: Karar testi
         run: node test/karar.mjs
+      - name: Ajan testi (sahte borsa)
+        run: node test/ajan.mjs
