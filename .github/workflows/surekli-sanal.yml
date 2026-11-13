@@ -3,7 +3,7 @@
 #
 # Boşlukları kapatmak için iki önlem:
 #  - Zincir: biten çalışma bir sonrakini kendisi başlatır (arada yalnızca birkaç dakika kalır).
-#  - Bekçi: zamanlayıcı 30 dakikada bir bakar; çalışan yoksa başlatır. GitHub zamanlanmış çalışmaları geciktirebilir
+#  - Bekçi: zamanlayıcı (ya da cron-job.org gibi bir dış zamanlayıcı) 30 dakikada bir bakar; çalışan yoksa başlatır. GitHub zamanlanmış çalışmaları geciktirebilir
 #    ya da atlayabilir; eskiden 6 saatte bir tek deneme vardı ve atlanınca portföy saatlerce izlenmiyordu.
 # Çalışmalar arasındaki kısa boşlukta stoplar izlenmez; program açılınca barları borsadan doğrular ve ilk fiyatta
 # stopları kontrol eder. Sonuçlar: veri dalındaki metyu-log.txt, metyu-trades.csv, metyu-state.json, raporlar/.
@@ -12,12 +12,17 @@ on:
   schedule:
     - cron: '7,37 * * * *'
   workflow_dispatch:
+    inputs:
+      zincir:
+        description: 'Zincir: biten çalışmanın başlattığı devam (elle başlatırken işaretleme)'
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
   kontrol:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 6
     permissions:
       actions: read
       contents: read
@@ -28,21 +33,31 @@ jobs:
       - id: bak
         env:
           GH_TOKEN: ${{ github.token }}
+          ZINCIR: ${{ inputs.zincir }}
         run: |
-          # Elle ya da zincirle başlatılan çalışma her zaman sıraya girer. Bekçi yalnızca başka çalışma yoksa başlatır.
-          if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then echo "calis=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/surekli-sanal.yml/runs?per_page=30" \
-            --jq "[.workflow_runs[] | select(.id != $GITHUB_RUN_ID and .status != \"completed\")] | length" 2>/dev/null || echo 0)
+          # Zincirle başlatılan çalışma her zaman sıraya girer. Zamanlayıcı, dış zamanlayıcı ya da elle başlatma bekçi
+          # gibi davranır: yalnızca başka çalışma yoksa başlatır (bu yüzden dışarıdan sık sık tetiklemek zararsızdır).
+          if [ "$ZINCIR" = "true" ]; then echo "calis=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          say() {
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/surekli-sanal.yml/runs?per_page=30" \
+              --jq "[.workflow_runs[] | select(.id != $GITHUB_RUN_ID and .status != \"completed\")] | \"\(length) \([.[] | (now - ((.run_started_at // .created_at) | fromdateiso8601))] | max // 0 | floor)\"" 2>/dev/null || echo "0 0"
+          }
+          read -r n eski <<< "$(say)"
+          # Çalışan iş bitmek üzereyse (5 saat 15 dakikadan eski) kısa süre beklenir: böylece biten çalışmanın ardından
+          # gelen tetikleme boşa gitmez.
+          if [ "$n" != "0" ] && [ "${eski:-0}" -ge 18900 ]; then
+            for i in 1 2 3 4 5 6 7 8 9; do sleep 20; read -r n eski <<< "$(say)"; [ "$n" = "0" ] && break; done
+          fi
           if [ "$n" = "0" ]; then echo "Çalışan yok: başlatılıyor."; echo "calis=true" >> "$GITHUB_OUTPUT"
           else echo "Zaten çalışan ya da sırada bekleyen var ($n): bir şey yapılmadı."; echo "calis=false" >> "$GITHUB_OUTPUT"; fi
       # Sağlık kontrolü: son kaydı kurallara göre denetler; sorun varsa "metyu sağlık uyarısı" kaydını açar, düzelince kapatır.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        if: always() && github.event_name == 'schedule'
+        if: always() && inputs.zincir != true
         with:
           persist-credentials: false
           sparse-checkout: kontrol
       - name: Sağlık kontrolü
-        if: always() && github.event_name == 'schedule'
+        if: always() && inputs.zincir != true
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -54,6 +69,7 @@ jobs:
     timeout-minutes: 355
     permissions:
       contents: write   # durumu "veri" dalına yazmak için
+      issues: write     # sağlık uyarısı kaydı için
       actions: write    # bir sonraki çalışmayı başlatmak için
     concurrency:
       group: surekli-sanal
@@ -102,7 +118,11 @@ jobs:
           SON=$((SECONDS + 335 * 60)); DK=0
           while [ $SECONDS -lt $SON ] && kill -0 $PID 2>/dev/null; do
             sleep 60; DK=$((DK + 1))
-            if [ $DK -eq 5 ] || [ $((DK % 30)) -eq 0 ]; then anlik; yayinla; fi
+            if [ $DK -eq 5 ] || [ $((DK % 30)) -eq 0 ]; then
+              anlik; yayinla
+              # Sağlık kontrolü çalışan işin içinden de yapılır: GitHub zamanlayıcısı hiç tetiklemese bile kurallar denetlenir.
+              node kontrol/saglik.mjs --dosya data/durum.json --kayit || true
+            fi
           done
           anlik
           kill -TERM $PID 2>/dev/null || true
@@ -127,7 +147,7 @@ jobs:
           # Yalnızca en az 30 dakika çalışmış bir çalışma zinciri sürdürür: hemen çöken bir sürüm kendini art arda
           # başlatamaz; o durumda 30 dakikalık bekçi yeniden dener.
           if [ -n "$BASLADI" ] && [ $(( $(date +%s) - BASLADI )) -ge 1800 ]; then
-            gh workflow run surekli-sanal.yml --repo "$GITHUB_REPOSITORY" --ref main && echo "Sonraki çalışma başlatıldı." || echo "Zincir başlatılamadı; bekçi 30 dakika içinde başlatır."
+            gh workflow run surekli-sanal.yml --repo "$GITHUB_REPOSITORY" --ref main -f zincir=true && echo "Sonraki çalışma başlatıldı." || echo "Zincir başlatılamadı; bekçi 30 dakika içinde başlatır."
           else
             echo "Çalışma 30 dakikadan kısa sürdü; zincir sürdürülmedi."
           fi

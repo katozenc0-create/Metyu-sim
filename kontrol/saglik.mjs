@@ -1,7 +1,7 @@
 // Health check for the continuous paper run. Reads the last saved status (durum.json on the "veri" branch), applies
 // the rules below and keeps ONE GitHub issue in step with the result: opened when something is wrong, updated when the
 // set of problems changes, closed when everything is fine again. GitHub notifies the repository owner of each step.
-// Run by the "kontrol" job every 30 minutes. Offline: node kontrol/saglik.mjs --dosya durum.json  (prints only).
+// Run by the "kontrol" job (scheduler or an outside trigger) and every 30 minutes from inside the running job. Offline: node kontrol/saglik.mjs --dosya durum.json  (prints only).
 import fs from 'node:fs';
 const arg = (k) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : null; };
 const repo = process.env.GITHUB_REPOSITORY, token = process.env.GH_TOKEN, file = arg('--dosya');
@@ -39,7 +39,8 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split(/[\\/]/).p
   const head = d && d.portfolio ? 'Özkaynak ' + Math.round(d.portfolio.equity) + ' · son kayıt ' + d.savedAt + '\n\n' : '';
   console.log(head + text);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '### Sağlık kontrolü\n' + head + text + '\n');
-  if (file || !token || !repo) process.exit(0);
+  // --dosya alone only prints; with --kayit the issue is kept in step too (used from inside the running job).
+  if ((file && !process.argv.includes('--kayit')) || !token || !repo) process.exit(0);
   const open = (await (await api('/repos/' + repo + '/issues?state=open&per_page=50')).json()).filter((i) => i.title === TITLE && !i.pull_request)[0];
   const body = 'Otomatik sağlık kontrolü (30 dakikada bir) şu sorunları buldu:\n\n' + text + '\n\n' + head + 'Durum sayfası: https://' + repo.split('/')[0].toLowerCase() + '.github.io/' + repo.split('/')[1] + '/durum/\n\nSorunlar giderilince bu kayıt kendiliğinden kapanır.\n<!-- imza:' + sig + ' -->';
   const post = (path, method, o) => api(path, { method, body: JSON.stringify(o) });
