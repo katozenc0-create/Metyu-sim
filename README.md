@@ -12,6 +12,15 @@ Bu depo, özel `metyu` deposunun yayın kopyasıdır; ana geliştirme orada yap�
 
 ## Ücretsiz sürekli sanal çalışma (GitHub Actions)
 
-`.github/workflows/surekli-sanal.yml` her 6 saatte bir çalıştırıcıyı ~5,5 saat çalıştırır ve durumu `veri` dalına kaydeder; sonraki çalışma oradan devam eder. Sonuçlar `veri` dalında: `metyu-log.txt` (olaylar), `metyu-trades.csv` (kapanan işlemler), `metyu-state.json` (portföy), `raporlar/` (haftalık rapor). Çalışmalar arasında kısa boşluklar olur; o sürede stoplar izlenmez, program açılınca ilk fiyatta kontrol eder. Gerçek 7/24 değildir.
+`.github/workflows/surekli-sanal.yml` çalıştırıcıyı ~5,5 saatlik çalışmalar halinde kesintisize yakın çalıştırır ve durumu `veri` dalına kaydeder; sonraki çalışma oradan devam eder.
 
-İlk çalıştırma: **Actions** sekmesi → **Sürekli sanal çalışma** → **Run workflow**.
+- **Zincir:** biten çalışma bir sonrakini kendisi başlatır; arada birkaç dakika kalır.
+- **Bekçi:** zamanlayıcı 30 dakikada bir bakar, çalışan yoksa başlatır. (GitHub zamanlanmış çalışmaları atlayabiliyor; eski 6 saatlik düzende bir atlama portföyü saatlerce izlemesiz bırakıyordu.)
+
+Sonuçlar `veri` dalında: `metyu-log.txt` (olaylar), `metyu-trades.csv` (kapanan işlemler), `metyu-state.json` (portföy), `raporlar/` (haftalık rapor). Aradaki kısa boşlukta stoplar izlenmez; program açılınca barları borsadan doğrular ve stopları ilk fiyatta kontrol eder. Gerçek 7/24 değildir.
+
+İlk çalıştırma: **Actions** sekmesi → **Sürekli sanal çalışma** → **Run workflow**. Telefondan durum: `durum/` sayfası.
+
+## Karar testi ve güvenlik
+
+`node test/karar.mjs` ağ kullanmadan risk kurallarını ve öğrenicinin yanlış alarm oranını sınar; her değişiklikte kendiliğinden çalışır. İş akışlarındaki hazır adımlar değişmez sürümlere sabitlidir, Dependabot ayda bir günceller. Ayrıntılar özel `metyu` deposundaki README'de: kanıt gücü, karantina, tasarruf modu, güvenlik.

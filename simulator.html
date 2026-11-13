@@ -1466,7 +1466,17 @@ function backtest(name, candles, lev, tfMs, prm, tradeFrom, ext) {
 // data), then trade them on the next, unseen window (10%), and slide on. Only the unseen windows count. A strategy is
 // trusted only if, on unseen data, it made money over enough trades with a profit factor above the bar; the live
 // settings come from the most recent training window.
-const WF = { pad: 300, folds: 7, trainFrac: 0.3, minTrainTrades: 6, minOosTrades: 20, minPf: 1.3, minPosFolds: 4, maxDD: 0.15, votePf: 1.5, votePosFolds: 5 };
+const WF = { pad: 300, folds: 7, trainFrac: 0.3, minTrainTrades: 6, minOosTrades: 20, minPf: 1.3, minPosFolds: 4, maxDD: 0.15, votePf: 1.5, votePosFolds: 5, strongT: 3 };
+// Evidence strength: the t-statistic of the per-trade results on unseen data (mean / its standard error). The learner
+// tries many candidates (strategies, filters, position management) and keeps the best, so some pass the bar by luck:
+// on random prices with no edge about half of the series still yield a "trusted" strategy (test/karar.mjs measures
+// this). WF.strongT is the t-value that such lucky picks rarely reach; below it a model is trusted only weakly.
+function tStat(x) {
+  const n = x.length; if (n < 2) return 0;
+  let m = 0; for (let i = 0; i < n; i++) m += x[i]; m /= n;
+  let v = 0; for (let i = 0; i < n; i++) v += (x[i] - m) * (x[i] - m); v /= n - 1;
+  return v > 0 ? m / Math.sqrt(v / n) : 0;
+}
 function trainScore(r) { return r.n < WF.minTrainTrades ? -Infinity : r.ret / Math.max(r.maxDD, 0.02); }
 function sliceExt(ext, a, b, filters) {
   if (!ext) return filters ? { filters: filters } : null;
@@ -1497,14 +1507,14 @@ function voteMembers(picks) {
 // Chain the unseen windows into one result: returns compound, trades and P/L add up, drawdown is measured on the
 // chained equity curve.
 function chainOos(runs) {
-  let eq = 1, peak = 1, mdd = 0, n = 0, wins = 0, gw = 0, gl = 0, pos = 0;
+  let eq = 1, peak = 1, mdd = 0, n = 0, wins = 0, gw = 0, gl = 0, pos = 0; const all = [];
   runs.forEach(function (r) {
     if (r.ret > 0) pos++;
     r.curve.forEach(function (v) { const e = eq * v / 10000; peak = Math.max(peak, e); mdd = Math.max(mdd, (peak - e) / peak); });
     eq *= 1 + r.ret; n += r.n; wins += r.wins;
-    r.closedPnl.forEach(function (x) { if (x > 0) gw += x; else gl -= x; });
+    r.closedPnl.forEach(function (x) { all.push(x); if (x > 0) gw += x; else gl -= x; });
   });
-  return { ret: eq - 1, maxDD: mdd, n: n, wins: wins, posFolds: pos, folds: runs.length, pf: gl > 0 ? gw / gl : (gw > 0 ? Infinity : 0) };
+  return { ret: eq - 1, maxDD: mdd, n: n, wins: wins, posFolds: pos, folds: runs.length, pf: gl > 0 ? gw / gl : (gw > 0 ? Infinity : 0), t: tStat(all) };
 }
 // Trusted: enough trades, profitable, profit factor over the bar, drawdown under the cap, and profitable in most of
 // the unseen windows (so one lucky stretch cannot carry it).
@@ -1604,17 +1614,18 @@ function walkForward(candles, lev, tfMs, onProgress, ext) {
           const latest = pickParams(name, candles, lev, tfMs, N - trainLen, N, ext);
           latestPicks[name] = latest;
           return { name: name, oos: pc.adoptO, base: fc.baseO, plain: chainOos(per[name].plain), prm: latest.prm, weak: latest.weak,
-            filters: fc.fl, pm: pm, ok: trusted(pc.adoptO), filterEval: fc.evals, pmEval: pc.evals };
+            filters: fc.fl, pm: pm, ok: trusted(pc.adoptO), strong: trusted(pc.adoptO) && pc.adoptO.t >= WF.strongT, filterEval: fc.evals, pmEval: pc.evals };
         });
-        const ok = results.filter(function (r) { return r.ok; }).sort(function (x, y) { return wfScore(y.oos) - wfScore(x.oos); });
+        // Strong evidence first, then return / drawdown.
+        const ok = results.filter(function (r) { return r.ok; }).sort(function (x, y) { return (y.strong - x.strong) || (wfScore(y.oos) - wfScore(x.oos)); });
         // Voting: chained over the unseen windows like any strategy; its live members come from the latest window.
         const ens = chainOos(ensRuns), liveMem = voteMembers(STRATS.map(function (n) { return Object.assign({ name: n }, latestPicks[n]); }));
         const ensRow = { name: 'ens', oos: ens, base: ens, plain: { ret: null, n: null }, prm: { members: liveMem }, weak: liveMem.length < 2,
-          filters: null, pm: null, ok: trustedVote(ens) && liveMem.length >= 2, filterEval: [], pmEval: [], windowsWithVote: ensMembers.filter(function (m) { return m.length >= 2; }).length };
+          filters: null, pm: null, ok: trustedVote(ens) && liveMem.length >= 2, strong: trustedVote(ens) && liveMem.length >= 2 && ens.t >= WF.strongT, filterEval: [], pmEval: [], windowsWithVote: ensMembers.filter(function (m) { return m.length >= 2; }).length };
         results.push(ensRow);
         // Prefer the simpler single strategy unless voting is clearly better (10%+ on return / drawdown).
-        let chosen = ok.length ? { name: ok[0].name, prm: ok[0].prm, filters: ok[0].filters, pm: ok[0].pm } : null;
-        if (ensRow.ok && (!ok.length || wfScore(ens) > wfScore(ok[0].oos) * 1.1)) chosen = { name: 'ens', prm: ensRow.prm, filters: null, pm: null };
+        let chosen = ok.length ? { name: ok[0].name, prm: ok[0].prm, filters: ok[0].filters, pm: ok[0].pm, strong: ok[0].strong, t: ok[0].oos.t } : null;
+        if (ensRow.ok && (!ok.length || (ensRow.strong >= ok[0].strong && wfScore(ens) > wfScore(ok[0].oos) * 1.1))) chosen = { name: 'ens', prm: ensRow.prm, filters: null, pm: null, strong: ensRow.strong, t: ens.t };
         resolve({ results: results, chosen: chosen, sets: sets.map(filterKey),
           span: { from: candles[0].t, to: candles[N - 1].t + tfMs, n: N, trainLen: trainLen, testLen: testLen, folds: WF.folds } });
       } catch (e) { reject(e); }

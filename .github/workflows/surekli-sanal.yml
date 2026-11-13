@@ -1,29 +1,62 @@
-# Sanal para portföyü: her 6 saatte bir ~5,5 saat çalışır, durumu "veri" dalına kaydeder, sonraki çalışma oradan devam eder.
-# Yalnızca sanal para: anahtar, hesap ya da emir yok. Çalışmalar arasında kısa boşluklar olur (o sürede stoplar izlenmez,
-# program açılınca ilk fiyatta kontrol eder). Sonuçlar: veri dalındaki metyu-log.txt, metyu-trades.csv, metyu-state.json, raporlar/.
+# Sanal para portföyü: her çalışma ~5,5 saat sürer, durumu "veri" dalına kaydeder, sonraki çalışma oradan devam eder.
+# Yalnızca sanal para: anahtar, hesap ya da emir yok.
+#
+# Boşlukları kapatmak için iki önlem:
+#  - Zincir: biten çalışma bir sonrakini kendisi başlatır (arada yalnızca birkaç dakika kalır).
+#  - Bekçi: zamanlayıcı 30 dakikada bir bakar; çalışan yoksa başlatır. GitHub zamanlanmış çalışmaları geciktirebilir
+#    ya da atlayabilir; eskiden 6 saatte bir tek deneme vardı ve atlanınca portföy saatlerce izlenmiyordu.
+# Çalışmalar arasındaki kısa boşlukta stoplar izlenmez; program açılınca barları borsadan doğrular ve ilk fiyatta
+# stopları kontrol eder. Sonuçlar: veri dalındaki metyu-log.txt, metyu-trades.csv, metyu-state.json, raporlar/.
 name: Sürekli sanal çalışma
 on:
   schedule:
-    - cron: '17 */6 * * *'
+    - cron: '7,37 * * * *'
   workflow_dispatch:
 permissions:
-  contents: write
-concurrency:
-  group: surekli-sanal
-  cancel-in-progress: false
+  contents: read
 jobs:
+  kontrol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read
+    outputs:
+      calis: ${{ steps.bak.outputs.calis }}
+    steps:
+      - id: bak
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Elle ya da zincirle başlatılan çalışma her zaman sıraya girer. Bekçi yalnızca başka çalışma yoksa başlatır.
+          if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then echo "calis=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          n=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/surekli-sanal.yml/runs?per_page=30" \
+            --jq "[.workflow_runs[] | select(.id != $GITHUB_RUN_ID and .status != \"completed\")] | length" 2>/dev/null || echo 0)
+          if [ "$n" = "0" ]; then echo "Çalışan yok: başlatılıyor."; echo "calis=true" >> "$GITHUB_OUTPUT"
+          else echo "Zaten çalışan ya da sırada bekleyen var ($n): bir şey yapılmadı."; echo "calis=false" >> "$GITHUB_OUTPUT"; fi
   calis:
+    needs: kontrol
+    if: needs.kontrol.outputs.calis == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 355
+    permissions:
+      contents: write   # durumu "veri" dalına yazmak için
+      actions: write    # bir sonraki çalışmayı başlatmak için
+    concurrency:
+      group: surekli-sanal
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - name: Önceki durumu geri yükle
         run: |
           mkdir -p data
-          REMOTE="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           if git ls-remote --exit-code --heads "$REMOTE" veri >/dev/null 2>&1; then
             git clone -q --depth 1 --branch veri "$REMOTE" veri-kopya
             rm -rf veri-kopya/.git
@@ -35,15 +68,17 @@ jobs:
       - name: Programı çalıştır (5,5 saat, 30 dakikada bir ara kayıt)
         run: |
           export METYU_DATA_DIR="$PWD/data"
-          REMOTE="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          echo "BASLADI=$(date +%s)" >> "$GITHUB_ENV"
           node metyu-runner.mjs --port 8787 > konsol.txt 2>&1 &
           PID=$!
           anlik() {
             if curl -s -m 10 http://127.0.0.1:8787/json > durum.tmp && jq --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '. + {savedAt: $t}' durum.tmp > durum.json 2>/dev/null; then cp durum.json data/durum.json; fi
             tail -n 200 konsol.txt > data/konsol-son.txt
           }
+          # Bu depo herkese açık: gizli olabilecek hiçbir dosya (Telegram anahtarı) "veri" dalına gitmez.
           yayinla() {
-            rm -rf yayin && mkdir yayin && cp -r data/. yayin/ && rm -f yayin/metyu.lock yayin/*.tmp
+            rm -rf yayin && mkdir yayin && cp -r data/. yayin/ && rm -f yayin/metyu.lock yayin/*.tmp yayin/metyu-telegram.json
             ( cd yayin && git init -q -b veri && git config user.name "github-actions" && git config user.email "github-actions@users.noreply.github.com" \
               && git add -A && git commit -q -m "Ara kayıt $(date -u +%Y-%m-%d-%H%M)" && git push -q -f "$REMOTE" veri ) || echo "Ara kayıt gönderilemedi; sonraki denemede tekrar"
           }
@@ -60,10 +95,20 @@ jobs:
         if: always()
         run: |
           cd data
-          rm -f metyu.lock
+          rm -f metyu.lock *.tmp metyu-telegram.json
           git init -q -b veri
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
           git add -A
           git commit -q -m "Durum $(date -u +%Y-%m-%d-%H%M)"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" veri
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" veri
+      - name: Sonraki çalışmayı başlat (zincir)
+        if: always()
+        run: |
+          # Yalnızca en az 30 dakika çalışmış bir çalışma zinciri sürdürür: hemen çöken bir sürüm kendini art arda
+          # başlatamaz; o durumda 30 dakikalık bekçi yeniden dener.
+          if [ -n "$BASLADI" ] && [ $(( $(date +%s) - BASLADI )) -ge 1800 ]; then
+            gh workflow run surekli-sanal.yml --repo "$GITHUB_REPOSITORY" --ref main && echo "Sonraki çalışma başlatıldı." || echo "Zincir başlatılamadı; bekçi 30 dakika içinde başlatır."
+          else
+            echo "Çalışma 30 dakikadan kısa sürdü; zincir sürdürülmedi."
+          fi
