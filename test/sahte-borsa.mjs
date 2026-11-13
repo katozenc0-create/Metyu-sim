@@ -1,6 +1,8 @@
 // Fake exchange for offline tests (loaded with node --import): prices are a fixed function of time, so candles and
 // quotes agree. No WebSocket; Binance-style HTTP endpoints only; everything else answers 503.
-const px = (t, k) => (k === 'B' ? 60000 : k === 'E' ? 3000 : 80) * Math.exp(0.04 * Math.sin(t / 1.1e6 + (k === 'E' ? 1 : 0)) + 0.012 * Math.sin(t / 97e3) + 0.008 * Math.sin(t / 13e3));
+// The price pattern is anchored to the moment the process starts, so every run sees the same market.
+const T0 = Date.now(), ANCHOR = Date.UTC(2026, 0, 5, 12, 0, 0);
+const px = (w, k, t = w - T0 + ANCHOR) => (k === 'B' ? 60000 : k === 'E' ? 3000 : 80) * Math.exp(0.04 * Math.sin(t / 1.1e6 + (k === 'E' ? 1 : 0)) + 0.012 * Math.sin(t / 97e3) + 0.008 * Math.sin(t / 13e3));
 const json = (o, status = 200) => Promise.resolve({ ok: status === 200, status, json: () => Promise.resolve(o), text: () => Promise.resolve(JSON.stringify(o)) });
 globalThis.WebSocket = undefined;
 globalThis.fetch = (url, opt) => {
