@@ -575,7 +575,7 @@ function buildReport(from, to) {
   const symRows = CFG.symbols.map((sym) => {
     const c = C[sym], tr = all.filter((h) => h.sym === sym), st = statsOf(tr), m = c.model;
     const r = m && m.chosen ? m.results.find((x) => x.name === m.chosen.name) : null;
-    const expPer = r && r.n ? Math.pow(1 + r.ret, 1 / r.n) - 1 : null;
+    const expPer = r && r.n ? (Math.pow(1 + r.ret, 1 / r.n) - 1) * (m.chosen.strong ? 1 : CFG.weakRisk) : null;
     const sub = CFG.capital / N, livePer = st.n ? st.pnl / st.n / sub : null;
     return '<tr><td><b>' + esc(short(sym)) + '</b><small>' + esc(m ? desc(m.chosen) : 'model yok') + '</small></td><td>' + st.n + '</td><td class="' + (st.pnl >= 0 ? 'up' : 'down') + '">' + esc((st.pnl >= 0 ? '+' : '') + money(st.pnl)) +
       '<small>kazanma ' + (st.win == null ? '–' : esc(pctS(st.win, 0))) + '</small></td><td>' + (expPer == null ? '–' : esc(pctS(expPer, 2))) + '</td><td>' + (livePer == null ? '–' : esc(pctS(livePer, 2))) + '</td></tr>';
@@ -596,7 +596,7 @@ function buildReport(from, to) {
     '<div>İşlem<b>' + S.n + '</b>kazanma ' + (S.win == null ? '–' : esc(pctS(S.win, 0))) + ' · kâr f. ' + esc(pf(S.pf)) + '</div></div>' +
     (svg ? '<h2>Özkaynak (saatlik)</h2>' + svg : '') +
     '<h2>Sembollere göre · canlı ve beklenen</h2><div class="wrap"><table><tr><th>Sembol · model</th><th>İşlem</th><th>K/Z</th><th>Beklenen / işlem</th><th>Canlı / işlem</th></tr>' + symRows + '</table></div>' +
-    '<p class="note">"Beklenen", modelin görmediği geçmiş veride işlem başına ortalama getirisi; "canlı", bu hafta sembolün payına düşen sermayeye göre işlem başına gerçekleşen. ' + (few ? 'Bu hafta işlem sayısı az (' + S.n + '); fark büyük ölçüde şans olabilir, birkaç haftalık toplamına bakmak daha anlamlı.' : 'Canlı sonuç sürekli beklenenin belirgin altındaysa model gerçek piyasada geçmişteki kadar işlemiyor demektir.') + '</p>' +
+    '<p class="note">"Beklenen", modelin görmediği geçmiş veride işlem başına ortalama getirisi (zayıf kanıtlı modelde küçültülmüş riske göre); "canlı", bu hafta sembolün payına düşen sermayeye göre işlem başına gerçekleşen. ' + (few ? 'Bu hafta işlem sayısı az (' + S.n + '); fark büyük ölçüde şans olabilir, birkaç haftalık toplamına bakmak daha anlamlı.' : 'Canlı sonuç sürekli beklenenin belirgin altındaysa model gerçek piyasada geçmişteki kadar işlemiyor demektir.') + '</p>' +
     (stratRows ? '<h2>Stratejilere göre</h2><div class="wrap"><table><tr><th>Strateji</th><th>İşlem</th><th>K/Z</th><th>Kazanma</th><th>Kâr f.</th></tr>' + stratRows + '</table></div>' : '') +
     '<h2>Model değişiklikleri</h2>' + (modelChanges ? '<ul>' + modelChanges + '</ul>' : '<p class="note">Bu hafta model değişmedi.</p>') +
     '<h2>Koruma ve sağlık (toplam)</h2><p>Takvim nedeniyle uygulanmayan sinyal: ' + (P.counters.calendar || 0) + ' · aynı yön sınırı: ' + (P.counters.sameSide || 0) + ' · piyasa filtresi: ' + (P.counters.filter || 0) + ' · zayıf kanıt: ' + (P.counters.weak || 0) +
@@ -691,13 +691,18 @@ function tgPoll() {
   }).catch(() => { /* try again next time */ });
 }
 // Watchers for things worth a message.
-let tgCalWas = null, tgOutage = false, tgDailyFor = null;
+let tgCalWas = null, tgOutage = false, tgDailyFor = null, tgCalStale = false;
 setInterval(() => {
   if (!TG) return;
   const cb = calendarBlock();
   if (cb && cb !== tgCalWas) tg('Ekonomi takvimi: ' + cb + ' — veri çevresinde yeni pozisyon açılmıyor.', false);
   if (!cb && tgCalWas) tg('Takvim koruması bitti; ajan normal çalışıyor.', false);
   tgCalWas = cb;
+  // The calendar guard only works with a fresh calendar: warn when it has not been fetched for 12 hours.
+  const calOld = process.uptime() > 600 && Date.now() - (cal.fetchedAt || 0) > 12 * 3600e3;
+  if (calOld && !tgCalStale) tg('Uyarı: ekonomi takvimi 12 saattir alınamıyor; takvim koruması güncel değil. Önemli veri saatlerinde /dur ile yeni işlemleri durdurabilirsin.', true);
+  if (!calOld && tgCalStale) tg('Ekonomi takvimi yeniden alındı; takvim koruması güncel.', true);
+  tgCalStale = calOld;
   if (everLive && !tgOutage && Date.now() - lastQuoteAny > 120000) { tgOutage = true; tg('Uyarı: 2 dakikadır fiyat gelmiyor. Program yeniden bağlanmayı deniyor; bu sırada yeni işlem açılmaz.', true); }
   if (tgOutage && Date.now() - lastQuoteAny < 10000) { tgOutage = false; tg('Fiyat akışı geri geldi (' + (feedName || '?') + ').', true); }
   // Daily summary at 21:00 local.
@@ -760,7 +765,7 @@ function snapshot() {
   return {
     portfolio: { equity: e, pnl: e - P.start, maxDD: P.maxDD, halt: P.halt, today: (e - P.dayStart) / P.dayStart },
     bar: TF_OF_BAR[CFG.bar], lev: CFG.lev, feed: feedName, eco: CFG.eco,
-    calendar: { active: calendarBlock(), next: nextEvent() && { at: new Date(nextEvent().t).toISOString(), title: nextEvent().title }, loaded: cal.ok },
+    calendar: { active: calendarBlock(), next: nextEvent() && { at: new Date(nextEvent().t).toISOString(), title: nextEvent().title }, loaded: cal.ok, ageMin: cal.fetchedAt ? Math.round((Date.now() - cal.fetchedAt) / 60000) : null },
     fng: mkt.fng, counters: P.counters,
     symbols: CFG.symbols.map((s) => { const c = C[s], a = c.acct; return {
       symbol: s, price: c.q.bid != null ? (c.q.bid + c.q.ask) / 2 : null, dataAgeSec: c.q.t ? Math.round((Date.now() - c.q.t) / 1000) : null,

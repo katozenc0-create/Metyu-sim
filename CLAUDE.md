@@ -22,3 +22,6 @@ Kullanıcı Claude kontörünün tutumlu harcanmasını istiyor.
 - `main`'e doğrudan push yok: dal + pull request. Özel depoda Actions dakikası kotadan düşer.
 - Kullanıcıya dönük metinler Türkçe; kod yorumları İngilizce.
 - Bu ortamdan borsalara erişim yok; gerçek veri sınaması GitHub Actions'ta yapılır.
+
+## Takip
+Bulunan sorunlar ve durumları `TAKIP.md` dosyasında (özel `metyu` deposu). Bir sorunu düzeltince ya da yenisini bulunca o dosyayı güncelle.
