@@ -1,0 +1,9 @@
+# İş akışlarında kullanılan hazır adımlar değişmez bir sürüme (commit) sabitlidir. Dependabot ayda bir yeni sürüm
+# çıktıysa güncelleme önerisi (pull request) açar; birleştirmeden önce Karar testi kendiliğinden çalışır.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3

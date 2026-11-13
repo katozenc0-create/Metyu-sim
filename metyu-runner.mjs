@@ -42,6 +42,11 @@ const CFG = {
   port: +(args.port ?? process.env.METYU_PORT ?? process.env.PORT ?? 8787),
   host: args.host || process.env.METYU_HOST || (HOSTED ? '0.0.0.0' : '127.0.0.1'),
   learnBars: +(args.history || 5000),
+  // Risk multiplier for a model whose evidence is weak (see WF.strongT in simulator.html). 0 = do not trade weak models.
+  weakRisk: +(args['weak-risk'] ?? process.env.METYU_WEAK_RISK ?? 0.25),
+  banDays: +(args['ban-days'] || 7),                              // a model that failed live is not re-adopted for this long
+  // Savings mode: fewer requests and less CPU, for hosting billed by usage. Trading rules are unchanged.
+  eco: !!args.tasarruf || process.env.METYU_TASARRUF === '1',
   html: args.html || path.join(DIR, 'simulator.html'),
   state: args.state || path.join(DATA, 'metyu-state.json'),
   logFile: path.join(DATA, 'metyu-log.txt'),
@@ -50,10 +55,15 @@ const CFG = {
 };
 const TF_OF_BAR = { 60: '1m', 300: '5m', 900: '15m', 3600: '1h', 14400: '4h' };
 if (!TF_OF_BAR[CFG.bar]) { console.error('--bar şunlardan biri olmalı: 60, 300, 900, 3600, 14400'); process.exit(1); }
+if (!(CFG.weakRisk >= 0 && CFG.weakRisk <= 1)) { console.error('--weak-risk 0 ile 1 arasında olmalı'); process.exit(1); }
 if (!(CFG.lev >= 1 && CFG.lev <= 5)) { console.error('--lev 1 ile 5 arasında olmalı'); process.exit(1); }
 const bad = CFG.symbols.filter((s) => !KNOWN.includes(s));
 if (bad.length || !CFG.symbols.length) { console.error('Desteklenen semboller: ' + KNOWN.join(', ')); process.exit(1); }
 if (typeof fetch !== 'function') { console.error('Node.js 22 veya üstü gerekli (fetch yok).'); process.exit(1); }
+
+// Every request gets a time limit: a connection that hangs must never stall learning or a poll forever.
+const rawFetch = globalThis.fetch;
+globalThis.fetch = (url, opt) => rawFetch(url, Object.assign({ signal: AbortSignal.timeout(20000) }, opt || {}));
 
 // ---------- Load the shared engine from the page ----------
 const STRATS = ['sma', 'momentum', 'meanrev', 'macd', 'rsi', 'sr'];
@@ -104,8 +114,9 @@ function tradeCsv(sym, h) {
 // P: portfolio. C[sym]: one virtual sub-account per symbol (an equal slice of the capital), with its own bars and model.
 // Each trade risks riskPerTrade of the whole portfolio; daily and drawdown limits apply to the portfolio as a whole.
 const N = CFG.symbols.length;
+const BASE_RISK = Math.min(0.05, CFG.riskPerTrade * N);
 function subAccount() {
-  return E.makeAccount({ balance: CFG.capital / N, risk: Math.min(0.05, CFG.riskPerTrade * N), maxLev: 5, dayLimit: 1, ddLimit: 1 });
+  return E.makeAccount({ balance: CFG.capital / N, risk: BASE_RISK, maxLev: 5, dayLimit: 1, ddLimit: 1 });
 }
 function newCtx(sym) {
   return { sym, acct: subAccount(), model: null, closes: [], bars: [], barIdx: null, st: { cur: null }, blocked: null, lastSide: null, lastLearnTry: 0 };
@@ -114,16 +125,35 @@ let P = { start: CFG.capital, peak: CFG.capital, maxDD: 0, day: null, dayStart: 
   counters: { calendar: 0, sameSide: 0, filter: 0, gaps: 0, reconnects: 0, spikes: 0, errors: 0 } };
 const C = {};
 let cal = { events: [], fetchedAt: 0, ok: false };
-(function load() {
-  let d = null;
-  if (fs.existsSync(CFG.state)) {
-    try { d = JSON.parse(fs.readFileSync(CFG.state, 'utf8')); }
-    catch (e) {
-      // Never overwrite an unreadable state silently: keep a copy, then start fresh.
-      const bad = CFG.state.replace(/\.json$/, '') + '.bozuk-' + Date.now() + '.json';
-      try { fs.copyFileSync(CFG.state, bad); } catch (e2) { /* ignore */ }
-      out('UYARI: kayıt dosyası okunamadı (' + e.message + '). Kopyası ' + path.basename(bad) + ' olarak saklandı; yeni sanal portföyle başlanıyor.');
+const STATE_PREV = CFG.state.replace(/\.json$/, '') + '.onceki.json';
+// A state file is used only if it parses and its money figures are sane numbers.
+function readState(file) {
+  if (!fs.existsSync(file)) return { d: null };
+  try {
+    const d = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (d && d.version === 2) {
+      const okNum = (v) => typeof v === 'number' && isFinite(v);
+      if (!d.P || !okNum(d.P.start) || !okNum(d.P.peak) || !(d.P.peak > 0) || !d.ctx || typeof d.ctx !== 'object') throw new Error('portföy alanları bozuk');
+      for (const k of Object.keys(d.ctx)) {
+        const a = d.ctx[k] && d.ctx[k].acct;
+        if (!a || !okNum(a.cash) || a.cash < 0 || !okNum(a.start)) throw new Error(k + ' hesabı bozuk');
+        if (a.pos && !(okNum(a.pos.qty) && a.pos.qty > 0 && okNum(a.pos.entry) && okNum(a.pos.stop) && okNum(a.pos.margin))) throw new Error(k + ' pozisyonu bozuk');
+      }
     }
+    return { d };
+  } catch (e) { return { d: null, err: e.message }; }
+}
+(function load() {
+  let { d, err } = readState(CFG.state);
+  if (err) {
+    // Never overwrite an unreadable state silently: keep a copy, then fall back to the last state that loaded cleanly.
+    const bad = CFG.state.replace(/\.json$/, '') + '.bozuk-' + Date.now() + '.json';
+    try { fs.copyFileSync(CFG.state, bad); } catch (e2) { /* ignore */ }
+    const prev = args['report-now'] ? { d: null } : readState(STATE_PREV);
+    if (prev.d) { d = prev.d; out('UYARI: kayıt dosyası kullanılamadı (' + err + '). Kopyası ' + path.basename(bad) + ' olarak saklandı; bir önceki sağlam kayıttan devam ediliyor.'); }
+    else out('UYARI: kayıt dosyası kullanılamadı (' + err + '). Kopyası ' + path.basename(bad) + ' olarak saklandı; yeni sanal portföyle başlanıyor.');
+  } else if (d && d.version === 2 && !args['report-now']) {
+    try { fs.copyFileSync(CFG.state, STATE_PREV); } catch (e) { /* ignore */ }
   }
   if (d && d.version !== 2 && d.acct) {
     fs.copyFileSync(CFG.state, CFG.state.replace(/\.json$/, '.v1.json'));
@@ -150,6 +180,8 @@ let cal = { events: [], fetchedAt: 0, ok: false };
     for (const sym of CFG.symbols) C[sym] = newCtx(sym);
     out('Yeni sanal portföy: ' + E.num(CFG.capital, 0) + ' USDT, ' + CFG.symbols.join(', ') + ' arasında eşit bölündü');
   }
+  // Bars saved before a restart may miss the bars that closed while the program was off: re-check them first.
+  for (const sym of CFG.symbols) if (C[sym].closes.length) C[sym].stale = true;
   for (const sym of CFG.symbols) { C[sym].evSeen = C[sym].acct.events.length; C[sym].histSeen = (C[sym].acct.history || []).length; C[sym].q = { bid: null, ask: null, t: 0 }; }
 })();
 function save() {
@@ -157,7 +189,7 @@ function save() {
   for (const sym of CFG.symbols) {
     const c = C[sym];
     ctx[sym] = { acct: Object.assign({}, c.acct, { book: null, events: c.acct.events.slice(-100), history: (c.acct.history || []).slice(-3000) }),
-      model: c.model, closes: c.closes, bars: c.bars, barIdx: c.barIdx, st: c.st, blocked: c.blocked, lastSide: c.lastSide, lastLearnTry: c.lastLearnTry };
+      model: c.model, closes: c.closes, bars: c.bars, barIdx: c.barIdx, st: c.st, blocked: c.blocked, lastSide: c.lastSide, lastLearnTry: c.lastLearnTry, ban: c.ban || null };
   }
   try {
     fs.writeFileSync(CFG.state + '.tmp', JSON.stringify({ version: 2, savedAt: Date.now(), barSec: CFG.bar, P, ctx, cal }));
@@ -212,7 +244,7 @@ function closeAllLocked() {
     if (c.acct.pos && fresh(c)) { E.closePos(c.acct, c.acct.pos.side === 'long' ? c.q.bid : c.q.ask, 'KİLİT ile'); flushEvents(c); save(); }
   }
 }
-setInterval(() => { try { portfolioCheck(); } catch (e) { P.counters.errors++; out('Portföy kontrol hatası: ' + e.message); } }, 1000);
+setInterval(() => { try { portfolioCheck(); } catch (e) { P.counters.errors++; out('Portföy kontrol hatası: ' + e.message); } }, CFG.eco ? 5000 : 1000);
 
 // ---------- Live quotes for all symbols over one connection: Binance WS → Hyperliquid WS → Binance HTTP ----------
 let feed = null, feedIdx = 0, attempt = 0, attemptStart = 0, everLive = false, lastQuoteAny = 0, feedName = null;
@@ -237,14 +269,14 @@ const FEEDS = [
     const run = () => fetch(url).then((r) => r.json()).then((rows) => {
       if (Array.isArray(rows)) rows.forEach((d) => { if (d && d.symbol && d.bidPrice) gotQuote(d.symbol, +d.bidPrice, +d.askPrice, 'Binance (HTTP)', id); });
     }).catch(() => {});
-    run(); const h = setInterval(run, 1000);
+    run(); const h = setInterval(run, CFG.eco ? 3000 : 1000);
     return { close: () => clearInterval(h) };
   } },
   // Last resort: Hyperliquid over plain HTTP (no WebSocket needed, no Binance needed). One request per symbol.
   { name: 'Hyperliquid (HTTP)', open: (id) => {
     const run = () => CFG.symbols.forEach((s) => fetch('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'l2Book', coin: short(s) }) })
       .then((r) => r.json()).then((d) => { const lv = hlLevels(d); if (lv) gotQuote(s, +lv[0][0].px, +lv[1][0].px, 'Hyperliquid (HTTP)', id); }).catch(() => {}));
-    run(); const h = setInterval(run, 1500);
+    run(); const h = setInterval(run, CFG.eco ? 3000 : 1500);
     return { close: () => clearInterval(h) };
   } },
 ];
@@ -272,6 +304,8 @@ function gotQuote(sym, bid, ask, name, id) {
   if (!c || id !== attempt) return;
   if (!(bid > 0) || !(ask >= bid) || !isFinite(bid) || !isFinite(ask)) return;
   const mid = (bid + ask) / 2, now = Date.now(), q = c.q;
+  // Savings mode: one quote per symbol per second is enough to watch stops (exchanges send hundreds).
+  if (CFG.eco && q.bid != null && now - q.t < 1000) return;
   if (q.bid != null && now - q.t < 10000) {
     const ref = (q.bid + q.ask) / 2;
     if (Math.abs(mid / ref - 1) > SPIKE) {
@@ -301,7 +335,12 @@ function rollBars(c, now, px) {
     seed(c);
     return;
   }
-  if (!(px > 0)) { P.counters.skippedBars = (P.counters.skippedBars || 0) + 1; return; }
+  // A bar closed without us (restart, short outage): the series now has a hole. No decisions on it; reload the
+  // bars from the exchange, then decide on this bar's close if that is still recent.
+  if (missed > 0 || !(px > 0)) {
+    P.counters.skippedBars = (P.counters.skippedBars || 0) + 1 + missed; c.curBar = null;
+    c.stale = true; seed(c, idx); return;
+  }
   const cb = c.curBar || { o: px, h: px, l: px };
   c.closes.push(px); c.bars.push({ o: cb.o, h: Math.max(cb.h, px), l: Math.min(cb.l, px), c: px }); c.curBar = null;
   if (c.closes.length > 400) { c.closes.shift(); c.bars.shift(); }
@@ -311,7 +350,7 @@ function rollBars(c, now, px) {
 setInterval(() => { for (const sym of CFG.symbols) { const c = C[sym]; if (c.q.bid != null && Date.now() - c.q.t <= BAR_PX_MAX_AGE) rollBars(c, Date.now(), (c.q.bid + c.q.ask) / 2); } }, 1000);
 const fill = (c, side, closing) => ((side === 'long') !== closing ? c.q.ask : c.q.bid);
 function agent(c) {
-  if (!fresh(c)) return;
+  if (!fresh(c) || c.stale) return; // no decisions on bars that are not verified complete
   const m = c.model;
   if (!m || !m.chosen) return; // no trusted strategy for this symbol: wait (open positions keep their stops)
   const name = m.chosen.name, prm = m.chosen.prm, a = c.acct;
@@ -334,29 +373,55 @@ function agent(c) {
     if (c.vetoLast !== veto) { c.vetoLast = veto; note(c, (sg.side === 'long' ? 'AL' : 'SAT') + ' sinyali uygulanmadı: ' + veto); }
     return;
   }
+  // Weak evidence: smaller bet (or none). Models learned before this check carry no measurement and count as weak.
+  const scale = m.chosen.strong ? 1 : CFG.weakRisk;
+  if (!(scale > 0)) { veto = 'modelin kanıtı zayıf (--weak-risk 0)'; kind = 'weak'; }
+  if (veto) {
+    if (c.vetoLast !== veto) { P.counters[kind] = (P.counters[kind] || 0) + 1; c.vetoLast = veto; note(c, (sg.side === 'long' ? 'AL' : 'SAT') + ' sinyali uygulanmadı: ' + veto); }
+    return;
+  }
   c.vetoLast = null;
   if (!a.halt && !wide) {
     try {
+      a.risk = BASE_RISK * scale;
       E.openPos(a, sg.side, fill(c, sg.side, false), sg.stop, CFG.lev, m.chosen.pm || null); a.pos.src = 'live'; a.pos.strat = name; c.lastSide = sg.side;
       const atStop = a.pos.qty * Math.abs(a.pos.entry - a.pos.stop) + a.pos.costs + a.pos.qty * a.pos.stop * (a.fee + a.slip);
-      tg(short(c.sym) + ' ' + sideTr(sg.side) + ' açıldı · ' + E.num(a.pos.entry, 2) + ' · stop ' + E.num(a.pos.stop, 2) + ' · stopta kayıp ≈ ' + money(atStop) + ' USDT · ' + SNAME[name] + (sg.votes ? ' (' + sg.votes + ' oy)' : ''), false);
+      tg(short(c.sym) + ' ' + sideTr(sg.side) + ' açıldı · ' + E.num(a.pos.entry, 2) + ' · stop ' + E.num(a.pos.stop, 2) + ' · stopta kayıp ≈ ' + money(atStop) + ' USDT · ' + SNAME[name] + (sg.votes ? ' (' + sg.votes + ' oy)' : '') + (scale < 1 ? ' · zayıf kanıt, risk x' + scale : ''), false);
     } catch (e) { /* refused by risk rules */ }
   }
   flushEvents(c);
 }
 
 // ---------- Warm-up from history ----------
-function seed(c) {
-  if (c.seeding || c.closes.length >= MAX_WARM) return;
+// Strategies carry state (e.g. the side of the last breakout). After bars are reloaded or the model changes, that
+// state is rebuilt by replaying the model over the loaded bars — the same warmed-up state the learner tested with.
+function rebuildState(c) {
+  c.st = { cur: null };
+  const ch = c.model && c.model.chosen;
+  if (!ch) return;
+  for (let i = Math.max(2, E.warmFor(ch.name, ch.prm)); i <= c.closes.length; i++) E.signalFor(ch.name, c.st, c.closes.slice(0, i), c.bars.slice(0, i), ch.prm);
+}
+// actFor: the bar index whose close is still waiting for a decision (set when a bar closed on incomplete data).
+function seed(c, actFor) {
+  if (actFor != null) c.actFor = actFor;
+  if (c.seeding || (!c.stale && c.closes.length >= MAX_WARM)) return;
   c.seeding = true;
   E.fetchCandles(c.sym, TF_OF_BAR[CFG.bar], 400).then((res) => {
-    const now = Date.now(), done = res.candles.filter((k) => k.c > 0 && k.t + barMs() <= now).slice(-400);
+    const now = Date.now(); let done = res.candles.filter((k) => k.c > 0 && k.h >= k.l && k.t + barMs() <= now).slice(-400);
+    // Use only the unbroken run of candles up to now (an exchange outage leaves a hole in its history too).
+    for (let i = done.length - 1; i > 0; i--) if (done[i].t - done[i - 1].t !== barMs()) { done = done.slice(i); break; }
     if (done.length < 10) throw new Error('az mum');
+    const idx = Math.floor(now / barMs());
+    if (Math.floor(done[done.length - 1].t / barMs()) !== idx - 1) throw new Error('son kapanan mum henüz gelmedi');
     c.closes = done.map((k) => k.c); c.bars = done.map((k) => ({ o: k.o, h: k.h, l: k.l, c: k.c }));
-    c.barIdx = Math.floor(now / barMs());
+    c.barIdx = idx; c.stale = false;
+    rebuildState(c);
     out('[' + short(c.sym) + '] Geçmişten ' + done.length + ' bar yüklendi (' + res.venue + ')');
+    // Decide on the just-closed bar only while it is recent (first 3 minutes of the new bar); otherwise wait for the next close.
+    if (c.actFor === idx && now - idx * barMs() < Math.min(180e3, barMs() / 4)) { try { agent(c); } catch (e) { P.counters.errors++; out('[' + short(c.sym) + '] Ajan hatası: ' + e.message); } }
+    c.actFor = null;
   }).catch((e) => out('[' + short(c.sym) + '] Geçmiş barlar yüklenemedi (' + e.message + '); 1 dk sonra yeniden denenecek'))
-    .finally(() => { c.seeding = false; if (c.closes.length < MAX_WARM) setTimeout(() => seed(c), 60000); });
+    .finally(() => { c.seeding = false; if (c.stale || c.closes.length < MAX_WARM) setTimeout(() => seed(c), 60000); });
 }
 
 // ---------- Market data: funding per symbol (charged to each sub-account) and Fear & Greed ----------
@@ -373,7 +438,7 @@ function pollFunding() {
     }))
     .then((x) => {
       mkt.fundSrc = x.src; mkt.t = Date.now();
-      for (const sym of CFG.symbols) { const f = x.m[sym]; if (isFinite(f)) { C[sym].funding = f; C[sym].acct.fund = f; } }
+      for (const sym of CFG.symbols) { const f = x.m[sym]; if (isFinite(f) && Math.abs(f) <= 0.02) { /* beyond ±2% per 8 h: bad data, keep the last rate */ C[sym].funding = f; C[sym].acct.fund = f; } }
     }).catch(() => { /* keep the last known rates */ });
 }
 // Order book every 30 s per symbol: orders fill by walking it. Older than 2 min: back to the slippage floor.
@@ -390,7 +455,7 @@ function pollDepth() {
         const band = (lv, dir) => lv.reduce((u, l) => (dir * (l[0] / lv[0][0] - 1) <= 0.01 ? u + l[0] * l[1] : u), 0);
         c.depthUsd = Math.min(band(b.bids, -1), band(b.asks, 1)); c.bookT = Date.now(); c.acct.book = Object.assign(b, { t: Date.now() });
       }).catch(() => { /* keep the last book until it is too old */ })
-      .finally(() => { if (c.bookT && Date.now() - c.bookT > 120000) c.acct.book = null; });
+      .finally(() => { if (c.bookT && Date.now() - c.bookT > (CFG.eco ? 300000 : 120000)) c.acct.book = null; });
   }
 }
 function pollFng() {
@@ -427,7 +492,9 @@ function nextEvent() { const now = Date.now(); return cal.events.find((x) => x.t
 // Relearn every 6 hours, or every 6 bars when bars are long (24 h for 4-hour bars).
 const RELEARN_EVERY = Math.max(6 * 3600e3, 6 * CFG.bar * 1000), RETRY_AFTER = 3600e3;
 let learningNow = null;
-const desc = (ch) => ch ? SNAME[ch.name] + ' (' + E.describeParams(ch.name, ch.prm) + (ch.filters ? ' · ' + E.filterLabel(ch.filters) : '') + (ch.pm ? ' · ' + E.pmLabel(ch.pm) : '') + ')' : 'bekleme (güvenilir strateji yok)';
+const descCore = (ch) => ch ? SNAME[ch.name] + ' (' + E.describeParams(ch.name, ch.prm) + (ch.filters ? ' · ' + E.filterLabel(ch.filters) : '') + (ch.pm ? ' · ' + E.pmLabel(ch.pm) : '') + ')' : 'bekleme (güvenilir strateji yok)';
+const desc = (ch) => descCore(ch) + (ch ? evid(ch) : '');
+const evid = (ch) => ch.t == null ? ' · kanıt ölçülmedi' : ch.strong ? ' · kanıt güçlü (t ' + E.num(ch.t, 1) + ')' : ' · kanıt zayıf (t ' + E.num(ch.t, 1) + (CFG.weakRisk > 0 ? ', risk x' + CFG.weakRisk : ', işlem yok') + ')';
 function learn(c, why) {
   if (learningNow) return;
   learningNow = c.sym;
@@ -439,14 +506,22 @@ function learn(c, why) {
     if (k.length < 1000) throw new Error('yeterli mum gelmedi (' + k.length + ')');
     return E.fetchMarketHistory(c.sym, k, tfMs).then((mh) => E.walkForward(k, CFG.lev, tfMs, null, { fund: mh.fund, fng: mh.fng, depthUsd: c.depthUsd || E.DEPTH_DEFAULT[c.sym] || 0 }).then((wf) => ({ wf, mh, venue: res.venue })));
   }).then(({ wf, mh, venue }) => {
+    // Quarantine: a model that was dropped for failing live is not taken back right away, however good its history looks.
+    if (c.ban && c.ban.until <= Date.now()) c.ban = null;
+    if (wf.chosen && c.ban && wf.chosen.name === c.ban.name) {
+      const sc = (r) => r.oos.ret / Math.max(r.oos.maxDD, 0.02);
+      const alt = wf.results.filter((r) => r.ok && r.name !== c.ban.name).sort((x, y) => (y.strong - x.strong) || (sc(y) - sc(x)))[0];
+      note(c, SNAME[c.ban.name] + ' canlıda başarısız olduğu için ' + ts(c.ban.until) + ' tarihine kadar karantinada; ' + (alt ? 'sıradaki güvenilir strateji alınıyor' : 'başka güvenilir strateji yok, bekleniyor'));
+      wf.chosen = alt ? { name: alt.name, prm: alt.prm, filters: alt.filters, pm: alt.pm, strong: alt.strong, t: alt.oos.t } : null;
+    }
     c.model = { tf, lev: CFG.lev, venue, learnedAt: Date.now(), chosen: wf.chosen, span: wf.span,
-      results: wf.results.map((r) => ({ name: r.name, ok: r.ok, prm: r.prm, filters: r.filters, pm: r.pm, ret: r.oos.ret, n: r.oos.n, pf: r.oos.pf, dd: r.oos.maxDD })),
+      results: wf.results.map((r) => ({ name: r.name, ok: r.ok, strong: !!r.strong, t: r.oos.t, prm: r.prm, filters: r.filters, pm: r.pm, ret: r.oos.ret, n: r.oos.n, pf: r.oos.pf, dd: r.oos.maxDD })),
       data: { funding: mh.fundSrc || null, fng: mh.fngSrc || null }, appliedAt: Date.now(), peakEq: E.equity(c.acct),
       history: ((prev && prev.history) || []).concat([{ t: Date.now(), why, chosen: wf.chosen ? desc(wf.chosen) : null }]).slice(-50) };
-    if (!prev || !prev.chosen || !wf.chosen || prev.chosen.name !== wf.chosen.name) c.st = { cur: null };
+    rebuildState(c);
     note(c, 'Model: ' + (prev ? desc(prev.chosen) + ' → ' : '') + desc(wf.chosen));
-    if (!prev || desc(prev.chosen) !== desc(wf.chosen)) tg(short(c.sym) + ' modeli ' + (prev ? 'değişti (' + why + ')' : 'hazır') + ': ' + desc(wf.chosen), true);
-    for (const r of c.model.results) out('[' + short(c.sym) + ']   ' + (r.ok ? '✓ ' : '  ') + SNAME[r.name].padEnd(17) + ' görmediği veride ' + (r.ret * 100).toFixed(1).padStart(6) + '% · ' + String(r.n).padStart(3) + ' işlem · kâr f. ' + (r.pf === Infinity || r.pf == null ? '∞' : r.pf.toFixed(2)) + ' · düşüş ' + (r.dd * 100).toFixed(0) + '%');
+    if (!prev || descCore(prev.chosen) !== descCore(wf.chosen) || !!(prev.chosen && prev.chosen.strong) !== !!(wf.chosen && wf.chosen.strong)) tg(short(c.sym) + ' modeli ' + (prev ? 'değişti (' + why + ')' : 'hazır') + ': ' + desc(wf.chosen), true);
+    for (const r of c.model.results) out('[' + short(c.sym) + ']   ' + (r.ok ? '✓ ' : '  ') + SNAME[r.name].padEnd(17) + ' görmediği veride ' + (r.ret * 100).toFixed(1).padStart(6) + '% · ' + String(r.n).padStart(3) + ' işlem · kâr f. ' + (r.pf === Infinity || r.pf == null ? '∞' : r.pf.toFixed(2)) + ' · düşüş ' + (r.dd * 100).toFixed(0) + '% · t ' + (r.t == null ? '–' : r.t.toFixed(1)));
     save();
   }).catch((e) => out('[' + short(c.sym) + '] Öğrenme yapılamadı (' + e.message + '); ' + (c.model ? 'mevcut modelle devam, ' : '') + '1 saat sonra yeniden denenecek'))
     .finally(() => { learningNow = null; });
@@ -457,13 +532,14 @@ function liveCheck() {
   for (const sym of CFG.symbols) {
     const c = C[sym], m = c.model;
     if (now - (c.lastLearnTry || 0) < RETRY_AFTER) continue;
-    let why = !m ? 'ilk öğrenme' : now - m.learnedAt > RELEARN_EVERY ? 'süresi doldu' : null;
+    let why = !m ? 'ilk öğrenme' : now - m.learnedAt > RELEARN_EVERY ? 'süresi doldu' : m.chosen && m.chosen.t == null ? 'kanıt gücü ölçümü' : null;
     if (!why && m && m.chosen) {
       const e = E.equity(c.acct); m.peakEq = Math.max(m.peakEq || e, e);
       const tr = (c.acct.history || []).filter((h) => h.tClose >= m.appliedAt);
       let gw = 0, gl = 0; tr.forEach((h) => { if (h.pnl > 0) gw += h.pnl; else gl -= h.pnl; });
       if (tr.length >= 8 && (gl > 0 ? gw / gl : 9) < 0.8) why = 'canlıda kâr faktörü düştü';
       else if ((m.peakEq - e) / m.peakEq > 0.06) why = 'canlıda %6 geriledi';
+      if (why) c.ban = { name: m.chosen.name, until: now + CFG.banDays * 86400e3 };
     }
     if (why) { learn(c, why); return; }
   }
@@ -499,7 +575,7 @@ function buildReport(from, to) {
   const symRows = CFG.symbols.map((sym) => {
     const c = C[sym], tr = all.filter((h) => h.sym === sym), st = statsOf(tr), m = c.model;
     const r = m && m.chosen ? m.results.find((x) => x.name === m.chosen.name) : null;
-    const expPer = r && r.n ? Math.pow(1 + r.ret, 1 / r.n) - 1 : null;
+    const expPer = r && r.n ? (Math.pow(1 + r.ret, 1 / r.n) - 1) * (m.chosen.strong ? 1 : CFG.weakRisk) : null;
     const sub = CFG.capital / N, livePer = st.n ? st.pnl / st.n / sub : null;
     return '<tr><td><b>' + esc(short(sym)) + '</b><small>' + esc(m ? desc(m.chosen) : 'model yok') + '</small></td><td>' + st.n + '</td><td class="' + (st.pnl >= 0 ? 'up' : 'down') + '">' + esc((st.pnl >= 0 ? '+' : '') + money(st.pnl)) +
       '<small>kazanma ' + (st.win == null ? '–' : esc(pctS(st.win, 0))) + '</small></td><td>' + (expPer == null ? '–' : esc(pctS(expPer, 2))) + '</td><td>' + (livePer == null ? '–' : esc(pctS(livePer, 2))) + '</td></tr>';
@@ -520,10 +596,10 @@ function buildReport(from, to) {
     '<div>İşlem<b>' + S.n + '</b>kazanma ' + (S.win == null ? '–' : esc(pctS(S.win, 0))) + ' · kâr f. ' + esc(pf(S.pf)) + '</div></div>' +
     (svg ? '<h2>Özkaynak (saatlik)</h2>' + svg : '') +
     '<h2>Sembollere göre · canlı ve beklenen</h2><div class="wrap"><table><tr><th>Sembol · model</th><th>İşlem</th><th>K/Z</th><th>Beklenen / işlem</th><th>Canlı / işlem</th></tr>' + symRows + '</table></div>' +
-    '<p class="note">"Beklenen", modelin görmediği geçmiş veride işlem başına ortalama getirisi; "canlı", bu hafta sembolün payına düşen sermayeye göre işlem başına gerçekleşen. ' + (few ? 'Bu hafta işlem sayısı az (' + S.n + '); fark büyük ölçüde şans olabilir, birkaç haftalık toplamına bakmak daha anlamlı.' : 'Canlı sonuç sürekli beklenenin belirgin altındaysa model gerçek piyasada geçmişteki kadar işlemiyor demektir.') + '</p>' +
+    '<p class="note">"Beklenen", modelin görmediği geçmiş veride işlem başına ortalama getirisi (zayıf kanıtlı modelde küçültülmüş riske göre); "canlı", bu hafta sembolün payına düşen sermayeye göre işlem başına gerçekleşen. ' + (few ? 'Bu hafta işlem sayısı az (' + S.n + '); fark büyük ölçüde şans olabilir, birkaç haftalık toplamına bakmak daha anlamlı.' : 'Canlı sonuç sürekli beklenenin belirgin altındaysa model gerçek piyasada geçmişteki kadar işlemiyor demektir.') + '</p>' +
     (stratRows ? '<h2>Stratejilere göre</h2><div class="wrap"><table><tr><th>Strateji</th><th>İşlem</th><th>K/Z</th><th>Kazanma</th><th>Kâr f.</th></tr>' + stratRows + '</table></div>' : '') +
     '<h2>Model değişiklikleri</h2>' + (modelChanges ? '<ul>' + modelChanges + '</ul>' : '<p class="note">Bu hafta model değişmedi.</p>') +
-    '<h2>Koruma ve sağlık (toplam)</h2><p>Takvim nedeniyle uygulanmayan sinyal: ' + (P.counters.calendar || 0) + ' · aynı yön sınırı: ' + (P.counters.sameSide || 0) + ' · piyasa filtresi: ' + (P.counters.filter || 0) +
+    '<h2>Koruma ve sağlık (toplam)</h2><p>Takvim nedeniyle uygulanmayan sinyal: ' + (P.counters.calendar || 0) + ' · aynı yön sınırı: ' + (P.counters.sameSide || 0) + ' · piyasa filtresi: ' + (P.counters.filter || 0) + ' · zayıf kanıt: ' + (P.counters.weak || 0) +
     '<br>Veri kesintisi: ' + (P.counters.gaps || 0) + ' · yeniden bağlanma: ' + (P.counters.reconnects || 0) + ' · elenen fiyat sıçraması: ' + (P.counters.spikes || 0) + ' · hata: ' + (P.counters.errors || 0) + (P.halt ? '<br><b class="down">Portföy şu an durdurulmuş: ' + esc(P.halt) + '</b>' : '') + '</p>' +
     '<h2>Son işlemler</h2>' + (tradeRows ? '<div class="wrap"><table><tr><th>Kapanış</th><th>İşlem</th><th>Giriş → çıkış</th><th>K/Z</th></tr>' + tradeRows + '</table></div>' : '<p class="note">Bu hafta kapanan işlem yok.</p>') +
     '<p class="note" style="margin-top:24px">Sanal para simülasyonudur; gerçek işlemde emir defteri derinliği ve kayma sonuçları kötüleştirebilir. Geçmişte işe yarayan ayar gelecekte de işe yarayacak diye bir garanti yok.</p></html>';
@@ -615,13 +691,18 @@ function tgPoll() {
   }).catch(() => { /* try again next time */ });
 }
 // Watchers for things worth a message.
-let tgCalWas = null, tgOutage = false, tgDailyFor = null;
+let tgCalWas = null, tgOutage = false, tgDailyFor = null, tgCalStale = false;
 setInterval(() => {
   if (!TG) return;
   const cb = calendarBlock();
   if (cb && cb !== tgCalWas) tg('Ekonomi takvimi: ' + cb + ' — veri çevresinde yeni pozisyon açılmıyor.', false);
   if (!cb && tgCalWas) tg('Takvim koruması bitti; ajan normal çalışıyor.', false);
   tgCalWas = cb;
+  // The calendar guard only works with a fresh calendar: warn when it has not been fetched for 12 hours.
+  const calOld = process.uptime() > 600 && Date.now() - (cal.fetchedAt || 0) > 12 * 3600e3;
+  if (calOld && !tgCalStale) tg('Uyarı: ekonomi takvimi 12 saattir alınamıyor; takvim koruması güncel değil. Önemli veri saatlerinde /dur ile yeni işlemleri durdurabilirsin.', true);
+  if (!calOld && tgCalStale) tg('Ekonomi takvimi yeniden alındı; takvim koruması güncel.', true);
+  tgCalStale = calOld;
   if (everLive && !tgOutage && Date.now() - lastQuoteAny > 120000) { tgOutage = true; tg('Uyarı: 2 dakikadır fiyat gelmiyor. Program yeniden bağlanmayı deniyor; bu sırada yeni işlem açılmaz.', true); }
   if (tgOutage && Date.now() - lastQuoteAny < 10000) { tgOutage = false; tg('Fiyat akışı geri geldi (' + (feedName || '?') + ').', true); }
   // Daily summary at 21:00 local.
@@ -683,14 +764,15 @@ function snapshot() {
   const e = peq();
   return {
     portfolio: { equity: e, pnl: e - P.start, maxDD: P.maxDD, halt: P.halt, today: (e - P.dayStart) / P.dayStart },
-    bar: TF_OF_BAR[CFG.bar], lev: CFG.lev, feed: feedName,
-    calendar: { active: calendarBlock(), next: nextEvent() && { at: new Date(nextEvent().t).toISOString(), title: nextEvent().title }, loaded: cal.ok },
+    bar: TF_OF_BAR[CFG.bar], lev: CFG.lev, feed: feedName, eco: CFG.eco,
+    calendar: { active: calendarBlock(), next: nextEvent() && { at: new Date(nextEvent().t).toISOString(), title: nextEvent().title }, loaded: cal.ok, ageMin: cal.fetchedAt ? Math.round((Date.now() - cal.fetchedAt) / 60000) : null },
     fng: mkt.fng, counters: P.counters,
     symbols: CFG.symbols.map((s) => { const c = C[s], a = c.acct; return {
       symbol: s, price: c.q.bid != null ? (c.q.bid + c.q.ask) / 2 : null, dataAgeSec: c.q.t ? Math.round((Date.now() - c.q.t) / 1000) : null,
       equity: E.equity(a), trades: a.trades, funding: c.funding ?? null, bars: c.closes.length,
       position: a.pos ? { side: a.pos.side, entry: a.pos.entry, stop: a.pos.stop, lev: a.pos.lev } : null,
-      model: c.model ? desc(c.model.chosen) : null, lastVeto: c.vetoLast || null }; }),
+      model: c.model ? desc(c.model.chosen) : null, evidence: c.model && c.model.chosen ? (c.model.chosen.t == null ? null : { t: c.model.chosen.t, strong: !!c.model.chosen.strong }) : null,
+      barsVerified: !c.stale, quarantine: c.ban && c.ban.until > Date.now() ? { strategy: SNAME[c.ban.name], until: new Date(c.ban.until).toISOString() } : null, lastVeto: c.vetoLast || null }; }),
     recent: CFG.symbols.flatMap((s) => C[s].acct.events.slice(-12).map((x) => ({ t: x.t, msg: '[' + short(s) + '] ' + x.msg }))).sort((a, b) => a.t - b.t).slice(-20)
       .map((x) => ts(x.t) + '  ' + x.msg),
   };
@@ -708,7 +790,9 @@ function viewAllowed(req, res) {
   if (!VIEW_KEY) return true;
   const cookie = /(?:^|;\s*)mk=([^;]+)/.exec(req.headers.cookie || '');
   if (cookie && keyOk(decodeURIComponent(cookie[1]))) return true;
+  if (badKeys >= 20) { res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '600' }); res.end('Çok fazla hatalı deneme; 10 dakika sonra yeniden dene.'); return false; }
   const u = new URL(req.url, 'http://x'), k = u.searchParams.get('k');
+  if (k && !keyOk(k)) badKeys++;
   if (k && keyOk(k)) {
     u.searchParams.delete('k');
     res.writeHead(302, { 'Set-Cookie': 'mk=' + encodeURIComponent(k) + '; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=31536000', Location: u.pathname + u.search });
@@ -716,9 +800,16 @@ function viewAllowed(req, res) {
   }
   res.writeHead(401, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Erişim anahtarı gerekli.'); return false;
 }
+// Sent with every answer: no caching, no framing, no outside resources, no scripts.
+const SEC = { 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store',
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" };
+// Wrong keys: after 20 within 10 minutes every keyless request waits it out (slows guessing to a crawl).
+let badKeys = 0; setInterval(() => { badKeys = 0; }, 600e3).unref();
 if (CFG.port > 0 && !args['telegram-setup']) {
   http.createServer((req, res) => {
     try {
+      for (const h of Object.keys(SEC)) res.setHeader(h, SEC[h]);
+      if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD' }); res.end(); return; }
       if (!viewAllowed(req, res)) return;
       if (req.url.startsWith('/json')) { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(snapshot(), null, 2)); return; }
       if (req.url.startsWith('/rapor-simdi')) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(buildReport(Date.now() - 7 * 86400e3, Date.now())); return; }
@@ -727,7 +818,7 @@ if (CFG.port > 0 && !args['telegram-setup']) {
       const s = snapshot(), p = s.portfolio;
       const reports = fs.existsSync(CFG.reportsDir) ? fs.readdirSync(CFG.reportsDir).filter((f) => /^metyu-rapor-.*\.html$/.test(f)).sort().reverse().slice(0, 8) : [];
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end('<!DOCTYPE html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>metyu portföy</title>' +
+      res.end('<!DOCTYPE html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="' + (CFG.eco ? 60 : 10) + '"><title>metyu portföy</title>' +
         '<body style="font:14px/1.5 system-ui;margin:16px auto;max-width:760px;padding:0 12px;background:#0e1316;color:#e6edef"><style>td,th{padding:5px 4px;border-bottom:1px solid #26343a;text-align:right}td:first-child,th:first-child{text-align:left}th{color:#8a9aa1;font-weight:500}a{color:#5cc8ff}</style>' +
         '<h1 style="font-size:20px">metyu · portföy · sanal para</h1>' +
         '<p>Portföy: <b>' + esc(money(p.equity)) + '</b> · K/Z ' + esc((p.pnl >= 0 ? '+' : '') + money(p.pnl)) + ' · bugün ' + esc(pctS(p.today)) + ' · maks. düşüş ' + esc(pctS(p.maxDD)) + (p.halt ? ' · <b style="color:#ff6b6b">DURDU: ' + esc(p.halt) + '</b>' : '') + '</p>' +
@@ -737,7 +828,7 @@ if (CFG.port > 0 && !args['telegram-setup']) {
           (x.position ? esc(x.position.side + ' · stop ' + E.num(x.position.stop, 2)) : '–') + '</td><td style="text-align:left">' + esc(x.model || 'öğreniyor…') + (x.lastVeto ? '<br><small style="color:#f2b84b">' + esc(x.lastVeto) + '</small>' : '') + '</td></tr>').join('') +
         '</table></div><h2 style="font-size:13px;color:#8a9aa1">SON OLAYLAR</h2><pre style="white-space:pre-wrap;background:#151c20;padding:10px;border-radius:8px;font-size:12px">' + esc(s.recent.slice().reverse().join('\n')) + '</pre>' +
         '<p>Raporlar: <a href="/rapor-simdi">son 7 gün (şimdi)</a>' + reports.map((f) => ' · <a href="/raporlar/' + f + '">' + esc(f.replace('metyu-rapor-', '').replace('.html', '')) + '</a>').join('') + '</p>' +
-        '<p style="color:#8a9aa1">Sayfa 10 sn\'de bir yenilenir. Ham veri: <a href="/json">/json</a></p></body></html>');
+        '<p style="color:#8a9aa1">Sayfa ' + (CFG.eco ? 60 : 10) + ' sn\'de bir yenilenir. Ham veri: <a href="/json">/json</a></p></body></html>');
     } catch (e) { res.writeHead(500); res.end('hata: ' + e.message); }
   }).on('error', (e) => out('Durum sayfası açılamadı (' + e.message + '); program çalışmaya devam ediyor'))
     .listen(CFG.port, CFG.host, () => out('Durum sayfası: http://' + (CFG.host === '0.0.0.0' ? 'BU-BILGISAYARIN-IP' : CFG.host) + ':' + CFG.port));
@@ -750,12 +841,12 @@ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { out('Kapanıyor
 
 if (!args['telegram-setup']) {
 if (HOSTED && DATA === DIR) out('UYARI: METYU_DATA_DIR ayarlı değil; barındırma ortamında program yeniden başlarsa hesap durumu sıfırlanır. Kalıcı disk bağlayıp METYU_DATA_DIR ile göster.');
-out('metyu runner başladı · ' + CFG.symbols.join(', ') + ' · ' + TF_OF_BAR[CFG.bar] + ' bar · ' + CFG.lev + 'x · işlem başına portföyün %' + E.num(CFG.riskPerTrade * 100, 0) + '\'i · sanal para');
+out('metyu runner başladı · ' + CFG.symbols.join(', ') + ' · ' + TF_OF_BAR[CFG.bar] + ' bar · ' + CFG.lev + 'x · işlem başına portföyün %' + E.num(CFG.riskPerTrade * 100, 0) + '\'i · sanal para' + (CFG.eco ? ' · tasarruf modu' : ''));
 connect(0); CFG.symbols.forEach((s) => seed(C[s])); pollFunding(); pollFng(); pollCalendar(); pollDepth();
-setInterval(pollDepth, 30000);
-setInterval(pollFunding, 60000); setInterval(pollFng, 30 * 60000); setInterval(pollCalendar, 3 * 3600e3);
+setInterval(pollDepth, CFG.eco ? 120000 : 30000);
+setInterval(pollFunding, CFG.eco ? 300000 : 60000); setInterval(pollFng, 30 * 60000); setInterval(pollCalendar, 3 * 3600e3);
 setTimeout(liveCheck, 3000); setInterval(liveCheck, 20000);
 setInterval(reportCheck, 10 * 60000); setTimeout(reportCheck, 5000);
-setInterval(save, 30000);
-if (TG) { setInterval(tgPoll, 4000); tg('metyu başladı · ' + CFG.symbols.map(short).join(', ') + ' · ' + TF_OF_BAR[CFG.bar] + ' bar · ' + CFG.lev + 'x · sanal para', true); out('Telegram bildirimleri açık'); }
+setInterval(save, CFG.eco ? 120000 : 30000);
+if (TG) { setInterval(tgPoll, CFG.eco ? 15000 : 4000); tg('metyu başladı · ' + CFG.symbols.map(short).join(', ') + ' · ' + TF_OF_BAR[CFG.bar] + ' bar · ' + CFG.lev + 'x · sanal para', true); out('Telegram bildirimleri açık'); }
 }
