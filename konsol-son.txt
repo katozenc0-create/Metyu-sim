@@ -1,0 +1,16 @@
+[14.11.2026 17:54:29] Önceki portföy yüklendi
+[14.11.2026 17:54:29] metyu runner başladı · BTCUSDT, ETHUSDT, SOLUSDT · 4h bar · 3x · işlem başına portföyün %1'i · sanal para
+[14.11.2026 17:54:29] Durum sayfası: http://127.0.0.1:8787
+[14.11.2026 17:54:29] [ETH] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 17:54:29] [BTC] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 17:54:29] [SOL] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 17:54:33] Fiyat kaynağı: Hyperliquid
+[14.11.2026 19:22:09] [ETH] Öğrenme başladı (süresi doldu): 5000 mum, 4h
+[14.11.2026 19:23:16] [ETH] Model: bekleme (güvenilir strateji yok) → bekleme (güvenilir strateji yok)
+[14.11.2026 19:23:16] [ETH]     SMA kesişimi      görmediği veride   29.3% · 184 işlem · kâr f. 1.31 · düşüş 11% · t 1.3
+[14.11.2026 19:23:16] [ETH]     Kırılım           görmediği veride  -13.7% ·  58 işlem · kâr f. 0.72 · düşüş 20% · t -0.7
+[14.11.2026 19:23:16] [ETH]     Ortalamaya dönüş  görmediği veride   -6.4% · 109 işlem · kâr f. 0.90 · düşüş 16% · t -0.5
+[14.11.2026 19:23:16] [ETH]     MACD              görmediği veride  -10.1% · 289 işlem · kâr f. 0.93 · düşüş 27% · t -0.4
+[14.11.2026 19:23:16] [ETH]     RSI + trend       görmediği veride    0.9% ·  20 işlem · kâr f. 1.14 · düşüş 4% · t 0.2
+[14.11.2026 19:23:16] [ETH]     Destek/direnç     görmediği veride  -25.2% ·  86 işlem · kâr f. 0.51 · düşüş 28% · t -2.6
+[14.11.2026 19:23:16] [ETH]     Oylama            görmediği veride  -19.0% · 183 işlem · kâr f. 0.79 · düşüş 32% · t -0.8

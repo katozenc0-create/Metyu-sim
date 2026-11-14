@@ -1,0 +1,160 @@
+[12.11.2026 13:12:21] Yeni sanal portföy: 10.000 USDT, BTCUSDT, ETHUSDT, SOLUSDT arasında eşit bölündü
+[12.11.2026 13:12:21] metyu runner başladı · BTCUSDT, ETHUSDT, SOLUSDT · 4h bar · 3x · işlem başına portföyün %1'i · sanal para
+[12.11.2026 13:12:22] [ETH] Geçmişten 399 bar yüklendi (Hyperliquid)
+[12.11.2026 13:12:22] [SOL] Geçmişten 399 bar yüklendi (Hyperliquid)
+[12.11.2026 13:12:22] [BTC] Geçmişten 399 bar yüklendi (Hyperliquid)
+[12.11.2026 13:12:22] Ekonomi takvimi yüklendi: bu hafta 4 yüksek etkili USD verisi
+[12.11.2026 13:12:24] [BTC] Öğrenme başladı (ilk öğrenme): 5000 mum, 4h
+[12.11.2026 13:12:26] Fiyat kaynağı: Hyperliquid
+[12.11.2026 13:13:30] [BTC] Model: Kırılım (20 bar kırılım, stop 3x · takip stop (1,5R sonra 1,0R geriden))
+[12.11.2026 13:13:30] [BTC]     SMA kesişimi      görmediği veride  -18.7% ·  96 işlem · kâr f. 0.77 · düşüş 29%
+[12.11.2026 13:13:30] [BTC]   ✓ Kırılım           görmediği veride   15.3% ·  50 işlem · kâr f. 1.55 · düşüş 6%
+[12.11.2026 13:13:30] [BTC]     Ortalamaya dönüş  görmediği veride  -14.0% ·  83 işlem · kâr f. 0.73 · düşüş 23%
+[12.11.2026 13:13:30] [BTC]     MACD              görmediği veride   -9.4% · 297 işlem · kâr f. 0.90 · düşüş 17%
+[12.11.2026 13:13:30] [BTC]     RSI + trend       görmediği veride    4.0% ·  18 işlem · kâr f. 1.59 · düşüş 5%
+[12.11.2026 13:13:30] [BTC]     Destek/direnç     görmediği veride  -16.4% ·  83 işlem · kâr f. 0.68 · düşüş 19%
+[12.11.2026 13:13:30] [BTC]     Oylama            görmediği veride  -29.0% ·  92 işlem · kâr f. 0.39 · düşüş 31%
+[12.11.2026 13:13:41] [ETH] Öğrenme başladı (ilk öğrenme): 5000 mum, 4h
+[12.11.2026 13:14:49] [ETH] Model: bekleme (güvenilir strateji yok)
+[12.11.2026 13:14:49] [ETH]     SMA kesişimi      görmediği veride  -29.4% · 186 işlem · kâr f. 0.77 · düşüş 39%
+[12.11.2026 13:14:49] [ETH]     Kırılım           görmediği veride  -10.4% ·  59 işlem · kâr f. 0.81 · düşüş 19%
+[12.11.2026 13:14:49] [ETH]     Ortalamaya dönüş  görmediği veride   -5.5% · 101 işlem · kâr f. 0.91 · düşüş 17%
+[12.11.2026 13:14:49] [ETH]     MACD              görmediği veride   -9.5% · 290 işlem · kâr f. 0.94 · düşüş 27%
+[12.11.2026 13:14:49] [ETH]     RSI + trend       görmediği veride    0.9% ·  20 işlem · kâr f. 1.15 · düşüş 4%
+[12.11.2026 13:14:49] [ETH]     Destek/direnç     görmediği veride  -26.3% ·  86 işlem · kâr f. 0.47 · düşüş 28%
+[12.11.2026 13:14:49] [ETH]     Oylama            görmediği veride  -21.9% · 183 işlem · kâr f. 0.76 · düşüş 32%
+[12.11.2026 13:15:01] [SOL] Öğrenme başladı (ilk öğrenme): 5000 mum, 4h
+[12.11.2026 13:16:09] [SOL] Model: Kırılım (55 bar kırılım, stop 2x)
+[12.11.2026 13:16:09] [SOL]     SMA kesişimi      görmediği veride    1.7% · 115 işlem · kâr f. 1.07 · düşüş 27%
+[12.11.2026 13:16:09] [SOL]   ✓ Kırılım           görmediği veride   56.5% ·  50 işlem · kâr f. 2.30 · düşüş 15%
+[12.11.2026 13:16:09] [SOL]     Ortalamaya dönüş  görmediği veride   -1.1% · 109 işlem · kâr f. 0.99 · düşüş 8%
+[12.11.2026 13:16:09] [SOL]     MACD              görmediği veride    2.8% · 295 işlem · kâr f. 1.06 · düşüş 18%
+[12.11.2026 13:16:09] [SOL]     RSI + trend       görmediği veride    5.1% ·  17 işlem · kâr f. 1.97 · düşüş 3%
+[12.11.2026 13:16:09] [SOL]     Destek/direnç     görmediği veride   -6.4% ·  83 işlem · kâr f. 0.88 · düşüş 16%
+[12.11.2026 13:16:09] [SOL]     Oylama            görmediği veride   -9.4% · 175 işlem · kâr f. 0.90 · düşüş 19%
+[12.11.2026 16:00:02] Durum · portföy 10.000,00 (+0,00) · BTC – · ETH – · SOL –
+[12.11.2026 18:47:21] Kapanıyor; durum kaydedildi
+[12.11.2026 23:40:40] Önceki portföy yüklendi
+[12.11.2026 23:40:41] metyu runner başladı · BTCUSDT, ETHUSDT, SOLUSDT · 4h bar · 3x · işlem başına portföyün %1'i · sanal para
+[12.11.2026 23:40:41] Durum sayfası: http://127.0.0.1:8787
+[12.11.2026 23:40:45] Fiyat kaynağı: Hyperliquid
+[13.11.2026 00:00:01] Durum · portföy 10.000,00 (+0,00) · BTC – · ETH – · SOL –
+[13.11.2026 04:00:00] [BTC] SAT açıldı 68.906,0000 · 3x · stop 70.396,5357
+[13.11.2026 04:00:00] [SOL] SAT açıldı 78,4340 · 3x · stop 79,7561
+[13.11.2026 04:00:01] Durum · portföy 9.992,25 (-7,75) · BTC short · ETH – · SOL short
+[13.11.2026 05:15:56] Kapanıyor; durum kaydedildi
+[13.11.2026 06:49:44] Önceki portföy yüklendi
+[13.11.2026 06:49:44] metyu runner başladı · BTCUSDT, ETHUSDT, SOLUSDT · 4h bar · 3x · işlem başına portföyün %1'i · sanal para
+[13.11.2026 06:49:44] Durum sayfası: http://127.0.0.1:8787
+[13.11.2026 06:49:48] Fiyat kaynağı: Hyperliquid
+[13.11.2026 06:49:56] [SOL] STOP kapandı 79,7660 · K/Z -100,72 (fonlama +0,05 dahil)
+[13.11.2026 08:00:01] Durum · portföy 9.917,32 (-82,68) · BTC short · ETH – · SOL –
+[13.11.2026 12:00:02] Durum · portföy 9.870,72 (-129,28) · BTC short · ETH – · SOL –
+[13.11.2026 12:25:02] Kapanıyor; durum kaydedildi
+[13.11.2026 19:19:27] Önceki portföy yüklendi
+[13.11.2026 19:19:27] metyu runner başladı · BTCUSDT, ETHUSDT, SOLUSDT · 4h bar · 3x · işlem başına portföyün %1'i · sanal para
+[13.11.2026 19:19:27] Durum sayfası: http://127.0.0.1:8787
+[13.11.2026 19:19:30] [BTC] Öğrenme başladı (süresi doldu): 5000 mum, 4h
+[13.11.2026 19:19:32] Fiyat kaynağı: Hyperliquid
+[13.11.2026 19:20:35] [BTC] Model: Kırılım (20 bar kırılım, stop 3x · takip stop (1,5R sonra 1,0R geriden)) → Kırılım (20 bar kırılım, stop 3x · takip stop (1,5R sonra 1,0R geriden))
+[13.11.2026 19:20:35] [BTC]     SMA kesişimi      görmediği veride  -10.9% · 101 işlem · kâr f. 0.89 · düşüş 29%
+[13.11.2026 19:20:35] [BTC]   ✓ Kırılım           görmediği veride   11.6% ·  50 işlem · kâr f. 1.44 · düşüş 5%
+[13.11.2026 19:20:35] [BTC]     Ortalamaya dönüş  görmediği veride  -14.9% ·  85 işlem · kâr f. 0.72 · düşüş 23%
+[13.11.2026 19:20:35] [BTC]     MACD              görmediği veride   -7.2% · 295 işlem · kâr f. 0.93 · düşüş 17%
+[13.11.2026 19:20:35] [BTC]     RSI + trend       görmediği veride    4.0% ·  18 işlem · kâr f. 1.60 · düşüş 5%
+[13.11.2026 19:20:35] [BTC]     Destek/direnç     görmediği veride  -11.1% ·  83 işlem · kâr f. 0.80 · düşüş 16%
+[13.11.2026 19:20:35] [BTC]     Oylama            görmediği veride  -21.0% ·  74 işlem · kâr f. 0.53 · düşüş 28%
+[13.11.2026 19:20:47] [ETH] Öğrenme başladı (süresi doldu): 5000 mum, 4h
+[13.11.2026 19:21:52] [ETH] Model: bekleme (güvenilir strateji yok) → bekleme (güvenilir strateji yok)
+[13.11.2026 19:21:52] [ETH]     SMA kesişimi      görmediği veride  -26.5% · 183 işlem · kâr f. 0.79 · düşüş 39%
+[13.11.2026 19:21:52] [ETH]     Kırılım           görmediği veride  -11.3% ·  59 işlem · kâr f. 0.77 · düşüş 17%
+[13.11.2026 19:21:52] [ETH]     Ortalamaya dönüş  görmediği veride   -8.0% ·  99 işlem · kâr f. 0.86 · düşüş 18%
+[13.11.2026 19:21:52] [ETH]     MACD              görmediği veride   -9.4% · 290 işlem · kâr f. 0.94 · düşüş 27%
+[13.11.2026 19:21:52] [ETH]     RSI + trend       görmediği veride    0.9% ·  20 işlem · kâr f. 1.15 · düşüş 4%
+[13.11.2026 19:21:52] [ETH]     Destek/direnç     görmediği veride  -26.6% ·  86 işlem · kâr f. 0.48 · düşüş 28%
+[13.11.2026 19:21:52] [ETH]     Oylama            görmediği veride  -25.5% · 188 işlem · kâr f. 0.69 · düşüş 32%
+[13.11.2026 19:22:07] [SOL] Öğrenme başladı (süresi doldu): 5000 mum, 4h
+[13.11.2026 19:23:12] [SOL] Model: Kırılım (55 bar kırılım, stop 2x) → Kırılım (55 bar kırılım, stop 2x)
+[13.11.2026 19:23:12] [SOL]     SMA kesişimi      görmediği veride   11.1% · 108 işlem · kâr f. 1.20 · düşüş 27%
+[13.11.2026 19:23:12] [SOL]   ✓ Kırılım           görmediği veride   67.3% ·  50 işlem · kâr f. 2.53 · düşüş 13%
+[13.11.2026 19:23:12] [SOL]   ✓ Ortalamaya dönüş  görmediği veride   17.3% · 109 işlem · kâr f. 1.33 · düşüş 7%
+[13.11.2026 19:23:12] [SOL]     MACD              görmediği veride    3.6% · 293 işlem · kâr f. 1.06 · düşüş 18%
+[13.11.2026 19:23:12] [SOL]     RSI + trend       görmediği veride    5.1% ·  17 işlem · kâr f. 1.97 · düşüş 3%
+[13.11.2026 19:23:12] [SOL]     Destek/direnç     görmediği veride   -4.6% ·  81 işlem · kâr f. 0.92 · düşüş 16%
+[13.11.2026 19:23:12] [SOL]     Oylama            görmediği veride   -7.1% · 142 işlem · kâr f. 0.93 · düşüş 24%
+[13.11.2026 19:31:55] Önceki portföy yüklendi
+[13.11.2026 19:31:55] metyu runner başladı · BTCUSDT, ETHUSDT, SOLUSDT · 4h bar · 3x · işlem başına portföyün %1'i · sanal para
+[13.11.2026 19:31:55] Durum sayfası: http://127.0.0.1:8787
+[13.11.2026 19:31:55] [ETH] Geçmişten 399 bar yüklendi (Hyperliquid)
+[13.11.2026 19:31:55] [BTC] Geçmişten 399 bar yüklendi (Hyperliquid)
+[13.11.2026 19:31:55] [SOL] Geçmişten 399 bar yüklendi (Hyperliquid)
+[13.11.2026 19:31:59] Fiyat kaynağı: Hyperliquid
+[13.11.2026 20:00:02] Durum · portföy 9.887,91 (-112,09) · BTC short · ETH – · SOL –
+[13.11.2026 20:19:35] [BTC] Öğrenme başladı (kanıt gücü ölçümü): 5000 mum, 4h
+[13.11.2026 20:20:37] [BTC] Model: Kırılım (20 bar kırılım, stop 3x · takip stop (1,5R sonra 1,0R geriden)) · kanıt ölçülmedi → Kırılım (20 bar kırılım, stop 3x · takip stop (1,5R sonra 1,0R geriden)) · kanıt zayıf (t 1,1, risk x0.25)
+[13.11.2026 20:20:37] [BTC]     SMA kesişimi      görmediği veride  -11.1% · 100 işlem · kâr f. 0.89 · düşüş 29% · t -0.3
+[13.11.2026 20:20:37] [BTC]   ✓ Kırılım           görmediği veride   12.1% ·  50 işlem · kâr f. 1.46 · düşüş 7% · t 1.1
+[13.11.2026 20:20:37] [BTC]     Ortalamaya dönüş  görmediği veride  -15.3% ·  86 işlem · kâr f. 0.72 · düşüş 23% · t -1.4
+[13.11.2026 20:20:37] [BTC]     MACD              görmediği veride   -7.6% · 296 işlem · kâr f. 0.93 · düşüş 17% · t -0.4
+[13.11.2026 20:20:37] [BTC]     RSI + trend       görmediği veride    4.0% ·  18 işlem · kâr f. 1.59 · düşüş 5% · t 0.7
+[13.11.2026 20:20:37] [BTC]     Destek/direnç     görmediği veride  -10.9% ·  83 işlem · kâr f. 0.81 · düşüş 16% · t -0.7
+[13.11.2026 20:20:37] [BTC]     Oylama            görmediği veride  -20.8% ·  73 işlem · kâr f. 0.54 · düşüş 29% · t -1.7
+[13.11.2026 20:22:15] [SOL] Öğrenme başladı (kanıt gücü ölçümü): 5000 mum, 4h
+[13.11.2026 20:23:17] [SOL] Model: Kırılım (55 bar kırılım, stop 2x) · kanıt ölçülmedi → Kırılım (55 bar kırılım, stop 2x) · kanıt zayıf (t 1,3, risk x0.25)
+[13.11.2026 20:23:17] [SOL]     SMA kesişimi      görmediği veride   13.2% · 109 işlem · kâr f. 1.22 · düşüş 27% · t 0.4
+[13.11.2026 20:23:17] [SOL]   ✓ Kırılım           görmediği veride   70.8% ·  50 işlem · kâr f. 2.58 · düşüş 14% · t 1.3
+[13.11.2026 20:23:17] [SOL]     Ortalamaya dönüş  görmediği veride    3.4% ·  98 işlem · kâr f. 1.08 · düşüş 10% · t 0.3
+[13.11.2026 20:23:17] [SOL]     MACD              görmediği veride    4.7% · 293 işlem · kâr f. 1.07 · düşüş 18% · t 0.4
+[13.11.2026 20:23:17] [SOL]     RSI + trend       görmediği veride    5.1% ·  17 işlem · kâr f. 1.97 · düşüş 3% · t 0.9
+[13.11.2026 20:23:17] [SOL]     Destek/direnç     görmediği veride   -3.2% ·  81 işlem · kâr f. 0.95 · düşüş 16% · t -0.1
+[13.11.2026 20:23:17] [SOL]     Oylama            görmediği veride   -6.8% · 142 işlem · kâr f. 0.93 · düşüş 24% · t -0.3
+[14.11.2026 00:00:02] Durum · portföy 9.936,64 (-63,36) · BTC short · ETH – · SOL –
+[14.11.2026 01:07:12] Kapanıyor; durum kaydedildi
+[14.11.2026 01:07:30] Önceki portföy yüklendi
+[14.11.2026 01:07:30] metyu runner başladı · BTCUSDT, ETHUSDT, SOLUSDT · 4h bar · 3x · işlem başına portföyün %1'i · sanal para
+[14.11.2026 01:07:30] Durum sayfası: http://127.0.0.1:8787
+[14.11.2026 01:07:31] [ETH] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 01:07:31] [BTC] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 01:07:31] [SOL] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 01:07:35] Fiyat kaynağı: Hyperliquid
+[14.11.2026 03:33:35] [BTC] Takip eden stop devrede: 68.130,5357
+[14.11.2026 04:00:02] Durum · portföy 10.034,04 (+34,04) · BTC short · ETH – · SOL –
+[14.11.2026 06:42:51] Kapanıyor; durum kaydedildi
+[14.11.2026 06:43:08] Önceki portföy yüklendi
+[14.11.2026 06:43:08] metyu runner başladı · BTCUSDT, ETHUSDT, SOLUSDT · 4h bar · 3x · işlem başına portföyün %1'i · sanal para
+[14.11.2026 06:43:08] Durum sayfası: http://127.0.0.1:8787
+[14.11.2026 06:43:08] [ETH] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 06:43:08] [BTC] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 06:43:08] [SOL] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 06:43:12] Fiyat kaynağı: Hyperliquid
+[14.11.2026 08:00:02] Durum · portföy 10.007,23 (+7,23) · BTC short · ETH – · SOL –
+[14.11.2026 08:35:25] Hiçbir fiyat kaynağına bağlanılamadı; 30 sn sonra yeniden denenecek
+[14.11.2026 08:36:11] Hiçbir fiyat kaynağına bağlanılamadı; 30 sn sonra yeniden denenecek
+[14.11.2026 08:36:53] Fiyat kaynağı: Hyperliquid (HTTP)
+[14.11.2026 12:00:02] Durum · portföy 10.000,91 (+0,91) · BTC short · ETH – · SOL –
+[14.11.2026 12:18:32] Kapanıyor; durum kaydedildi
+[14.11.2026 12:18:48] Önceki portföy yüklendi
+[14.11.2026 12:18:48] metyu runner başladı · BTCUSDT, ETHUSDT, SOLUSDT · 4h bar · 3x · işlem başına portföyün %1'i · sanal para
+[14.11.2026 12:18:48] Durum sayfası: http://127.0.0.1:8787
+[14.11.2026 12:18:49] [ETH] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 12:18:49] [BTC] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 12:18:49] [SOL] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 12:18:53] Fiyat kaynağı: Hyperliquid
+[14.11.2026 16:00:01] Durum · portföy 10.099,37 (+99,37) · BTC short · ETH – · SOL –
+[14.11.2026 17:54:12] Kapanıyor; durum kaydedildi
+[14.11.2026 17:54:29] Önceki portföy yüklendi
+[14.11.2026 17:54:29] metyu runner başladı · BTCUSDT, ETHUSDT, SOLUSDT · 4h bar · 3x · işlem başına portföyün %1'i · sanal para
+[14.11.2026 17:54:29] Durum sayfası: http://127.0.0.1:8787
+[14.11.2026 17:54:29] [ETH] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 17:54:29] [BTC] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 17:54:29] [SOL] Geçmişten 399 bar yüklendi (Hyperliquid)
+[14.11.2026 17:54:33] Fiyat kaynağı: Hyperliquid
+[14.11.2026 19:22:09] [ETH] Öğrenme başladı (süresi doldu): 5000 mum, 4h
+[14.11.2026 19:23:16] [ETH] Model: bekleme (güvenilir strateji yok) → bekleme (güvenilir strateji yok)
+[14.11.2026 19:23:16] [ETH]     SMA kesişimi      görmediği veride   29.3% · 184 işlem · kâr f. 1.31 · düşüş 11% · t 1.3
+[14.11.2026 19:23:16] [ETH]     Kırılım           görmediği veride  -13.7% ·  58 işlem · kâr f. 0.72 · düşüş 20% · t -0.7
+[14.11.2026 19:23:16] [ETH]     Ortalamaya dönüş  görmediği veride   -6.4% · 109 işlem · kâr f. 0.90 · düşüş 16% · t -0.5
+[14.11.2026 19:23:16] [ETH]     MACD              görmediği veride  -10.1% · 289 işlem · kâr f. 0.93 · düşüş 27% · t -0.4
+[14.11.2026 19:23:16] [ETH]     RSI + trend       görmediği veride    0.9% ·  20 işlem · kâr f. 1.14 · düşüş 4% · t 0.2
+[14.11.2026 19:23:16] [ETH]     Destek/direnç     görmediği veride  -25.2% ·  86 işlem · kâr f. 0.51 · düşüş 28% · t -2.6
+[14.11.2026 19:23:16] [ETH]     Oylama            görmediği veride  -19.0% · 183 işlem · kâr f. 0.79 · düşüş 32% · t -0.8

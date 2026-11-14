@@ -1,0 +1,104 @@
+{
+  "portfolio": {
+    "equity": 10121.190360437324,
+    "pnl": 121.19036043732376,
+    "maxDD": 0.019247089199148217,
+    "halt": null,
+    "today": 0.018572784626898688
+  },
+  "bar": "4h",
+  "lev": 3,
+  "feed": "Hyperliquid",
+  "eco": false,
+  "calendar": {
+    "active": null,
+    "next": null,
+    "loaded": true,
+    "ageMin": 90
+  },
+  "fng": 13,
+  "counters": {
+    "calendar": 0,
+    "sameSide": 0,
+    "filter": 0,
+    "gaps": 0,
+    "reconnects": 14,
+    "spikes": 0,
+    "errors": 0,
+    "skippedBars": 6
+  },
+  "symbols": [
+    {
+      "symbol": "BTCUSDT",
+      "price": 65339.5,
+      "dataAgeSec": 3,
+      "equity": 3555.2421639219137,
+      "trades": 1,
+      "funding": 0.0000352208,
+      "bars": 399,
+      "position": {
+        "side": "short",
+        "entry": 68906,
+        "stop": 66525.53571428571,
+        "lev": 3
+      },
+      "model": "Kırılım (20 bar kırılım, stop 3x · takip stop (1,5R sonra 1,0R geriden)) · kanıt zayıf (t 1,1, risk x0.25)",
+      "evidence": {
+        "t": 1.0566979593480736,
+        "strong": false
+      },
+      "barsVerified": true,
+      "quarantine": null,
+      "lastVeto": null
+    },
+    {
+      "symbol": "ETHUSDT",
+      "price": 1824.1,
+      "dataAgeSec": 3,
+      "equity": 3333.3333333333335,
+      "trades": 0,
+      "funding": -0.0000805176,
+      "bars": 399,
+      "position": null,
+      "model": "bekleme (güvenilir strateji yok)",
+      "evidence": null,
+      "barsVerified": true,
+      "quarantine": null,
+      "lastVeto": null
+    },
+    {
+      "symbol": "SOLUSDT",
+      "price": 71.7305,
+      "dataAgeSec": 3,
+      "equity": 3232.6148631820765,
+      "trades": 1,
+      "funding": -0.000094116,
+      "bars": 399,
+      "position": null,
+      "model": "Kırılım (55 bar kırılım, stop 2x) · kanıt zayıf (t 1,3, risk x0.25)",
+      "evidence": {
+        "t": 1.346745072737734,
+        "strong": false
+      },
+      "barsVerified": true,
+      "quarantine": null,
+      "lastVeto": null
+    }
+  ],
+  "recent": [
+    "12.11.2026 13:13:30  [BTC] Model: Kırılım (20 bar kırılım, stop 3x · takip stop (1,5R sonra 1,0R geriden))",
+    "12.11.2026 13:14:49  [ETH] Model: bekleme (güvenilir strateji yok)",
+    "12.11.2026 13:16:09  [SOL] Model: Kırılım (55 bar kırılım, stop 2x)",
+    "13.11.2026 04:00:00  [BTC] SAT açıldı 68.906,0000 · 3x · stop 70.396,5357",
+    "13.11.2026 04:00:00  [SOL] SAT açıldı 78,4340 · 3x · stop 79,7561",
+    "13.11.2026 06:49:56  [SOL] STOP kapandı 79,7660 · K/Z -100,72 (fonlama +0,05 dahil)",
+    "13.11.2026 19:20:35  [BTC] Model: Kırılım (20 bar kırılım, stop 3x · takip stop (1,5R sonra 1,0R geriden)) → Kırılım (20 bar kırılım, stop 3x · takip stop (1,5R sonra 1,0R geriden))",
+    "13.11.2026 19:21:52  [ETH] Model: bekleme (güvenilir strateji yok) → bekleme (güvenilir strateji yok)",
+    "13.11.2026 19:23:12  [SOL] Model: Kırılım (55 bar kırılım, stop 2x) → Kırılım (55 bar kırılım, stop 2x)",
+    "13.11.2026 20:20:37  [BTC] Model: Kırılım (20 bar kırılım, stop 3x · takip stop (1,5R sonra 1,0R geriden)) · kanıt ölçülmedi → Kırılım (20 bar kırılım, stop 3x · takip stop (1,5R sonra 1,0R geriden)) · kanıt zayıf (t 1,1, risk x0.25)",
+    "13.11.2026 20:23:17  [SOL] Model: Kırılım (55 bar kırılım, stop 2x) · kanıt ölçülmedi → Kırılım (55 bar kırılım, stop 2x) · kanıt zayıf (t 1,3, risk x0.25)",
+    "14.11.2026 03:33:35  [BTC] Takip eden stop devrede: 68.130,5357",
+    "14.11.2026 19:23:16  [ETH] Model: bekleme (güvenilir strateji yok) → bekleme (güvenilir strateji yok)"
+  ],
+  "savedAt": "2026-11-14T19:24:34Z"
+}
