@@ -121,7 +121,7 @@ function subAccount() {
 function newCtx(sym) {
   return { sym, acct: subAccount(), model: null, closes: [], bars: [], barIdx: null, st: { cur: null }, blocked: null, lastSide: null, lastLearnTry: 0 };
 }
-let P = { start: CFG.capital, peak: CFG.capital, maxDD: 0, day: null, dayStart: CFG.capital, halt: null, eqHist: [], lastReport: 0,
+let P = { since: Date.now(), everLocked: false, start: CFG.capital, peak: CFG.capital, maxDD: 0, day: null, dayStart: CFG.capital, halt: null, eqHist: [], lastReport: 0,
   counters: { calendar: 0, sameSide: 0, filter: 0, gaps: 0, reconnects: 0, spikes: 0, errors: 0 } };
 const C = {};
 let cal = { events: [], fetchedAt: 0, ok: false };
@@ -180,6 +180,9 @@ function readState(file) {
     for (const sym of CFG.symbols) C[sym] = newCtx(sym);
     out('Yeni sanal portföy: ' + E.num(CFG.capital, 0) + ' USDT, ' + CFG.symbols.join(', ') + ' arasında eşit bölündü');
   }
+  // States saved before the readiness lock existed carry no start date: take it from the first equity point.
+  if (d && d.version === 2 && d.P && !d.P.since) P.since = (P.eqHist[0] && P.eqHist[0][0]) || Date.now();
+  if (P.halt === 'düşüş') P.everLocked = true;
   // Bars saved before a restart may miss the bars that closed while the program was off: re-check them first.
   for (const sym of CFG.symbols) if (C[sym].closes.length) C[sym].stale = true;
   for (const sym of CFG.symbols) { C[sym].evSeen = C[sym].acct.events.length; C[sym].histSeen = (C[sym].acct.history || []).length; C[sym].q = { bid: null, ask: null, t: 0 }; }
@@ -221,7 +224,7 @@ function portfolioCheck() {
   P.peak = Math.max(P.peak, e); P.maxDD = Math.max(P.maxDD, (P.peak - e) / P.peak);
   if (P.halt === 'düşüş') { closeAllLocked(); return; }
   if ((P.peak - e) / P.peak >= CFG.ddLimit) {
-    P.halt = 'düşüş';
+    P.halt = 'düşüş'; P.everLocked = true;
     out('DURDURULDU: portföy zirveden %' + E.num(CFG.ddLimit * 100, 0) + ' düştü; açık pozisyonlar kapanıyor, yeni işlem için durumu sıfırla');
     tg('KİLİT: portföy zirvesinden %' + E.num(CFG.ddLimit * 100, 0) + ' düştü. Açık pozisyonlar kapatılıyor ve yeni işlem açılmayacak. Yeniden başlatmak için durum dosyasını sıfırlaman gerekir.', true);
     for (const sym of CFG.symbols) C[sym].acct.halt = 'maksimum düşüş limiti';
@@ -601,6 +604,7 @@ function buildReport(from, to) {
     '<h2>Model değişiklikleri</h2>' + (modelChanges ? '<ul>' + modelChanges + '</ul>' : '<p class="note">Bu hafta model değişmedi.</p>') +
     '<h2>Koruma ve sağlık (toplam)</h2><p>Takvim nedeniyle uygulanmayan sinyal: ' + (P.counters.calendar || 0) + ' · aynı yön sınırı: ' + (P.counters.sameSide || 0) + ' · piyasa filtresi: ' + (P.counters.filter || 0) + ' · zayıf kanıt: ' + (P.counters.weak || 0) +
     '<br>Veri kesintisi: ' + (P.counters.gaps || 0) + ' · yeniden bağlanma: ' + (P.counters.reconnects || 0) + ' · elenen fiyat sıçraması: ' + (P.counters.spikes || 0) + ' · hata: ' + (P.counters.errors || 0) + (P.halt ? '<br><b class="down">Portföy şu an durdurulmuş: ' + esc(P.halt) + '</b>' : '') + '</p>' +
+    '<h2>Gerçek işlem kilidi</h2>' + readinessHtml(readiness()) +
     '<h2>Son işlemler</h2>' + (tradeRows ? '<div class="wrap"><table><tr><th>Kapanış</th><th>İşlem</th><th>Giriş → çıkış</th><th>K/Z</th></tr>' + tradeRows + '</table></div>' : '<p class="note">Bu hafta kapanan işlem yok.</p>') +
     '<p class="note" style="margin-top:24px">Sanal para simülasyonudur; gerçek işlemde emir defteri derinliği ve kayma sonuçları kötüleştirebilir. Geçmişte işe yarayan ayar gelecekte de işe yarayacak diye bir garanti yok.</p></html>';
 }
@@ -760,13 +764,36 @@ function barDone(c) {
     save();
   }, 1500);
 }
+// ---------- Real-money readiness lock ----------
+// This program sends no orders and holds no keys. The lock only measures whether the paper record would justify the
+// owner even considering real money: six conditions, all required. The last two can never turn green by themselves.
+function readiness() {
+  const days = (Date.now() - P.since) / 86400e3, tr = [];
+  for (const s of CFG.symbols) for (const h of C[s].acct.history) tr.push(h);
+  // R = result of a trade in units of the amount it risked at entry (trades from before r0 was recorded are left out).
+  const R = tr.filter((h) => h.r0 > 0).map((h) => h.pnl / h.r0), n = R.length;
+  let lo = null;
+  if (n >= 2) { const m = R.reduce((a, b) => a + b, 0) / n, v = R.reduce((a, b) => a + (b - m) * (b - m), 0) / (n - 1); lo = m - 1.96 * Math.sqrt(v / n); }
+  const items = [
+    { ok: days >= 14, text: 'İleri test en az 14 gün sürdü', val: E.num(days, 1) + ' gün' },
+    { ok: tr.length >= 30, text: 'En az 30 kapanmış işlem', val: tr.length + ' işlem' },
+    { ok: n >= 30 && lo > 0, text: 'İşlem başına ortalama sonucun (R) %95 alt sınırı sıfırın üstünde', val: lo == null ? 'yeterli veri yok' : (lo >= 0 ? '+' : '') + E.num(lo, 2) + ' R (' + n + ' işlem)' },
+    { ok: !P.everLocked && P.maxDD < 0.10, text: 'Düşüş kilidi hiç devreye girmedi ve en büyük düşüş %10\'un altında', val: 'en büyük düşüş %' + E.num(P.maxDD * 100, 1) + (P.everLocked ? ', kilit devreye girdi' : '') },
+    { ok: false, text: 'Gerçek hesap, salt-okunur anahtarla bağlı ve doğrulanmış', val: 'bağlı değil (bu programda hesap bağlantısı yok)' },
+    { ok: false, text: 'Sahibinin açık onayı', val: 'verilmedi' },
+  ];
+  return { met: items.filter((x) => x.ok).length, total: items.length, locked: true, items };
+}
+const readinessHtml = (r) => '<p><b>' + r.met + ' / ' + r.total + ' koşul sağlandı · gerçek emirler KİLİTLİ.</b> Bu programda emir gönderen kod yok; kilit yalnızca sanal sonuçların gerçek parayı düşünmeye değip değmediğini ölçer.</p><ul>' +
+  r.items.map((x) => '<li>' + (x.ok ? '✅ ' : '⬜ ') + esc(x.text) + ' — <i>' + esc(x.val) + '</i></li>').join('') + '</ul>';
+
 function snapshot() {
   const e = peq();
   return {
     portfolio: { equity: e, pnl: e - P.start, maxDD: P.maxDD, halt: P.halt, today: (e - P.dayStart) / P.dayStart },
     bar: TF_OF_BAR[CFG.bar], lev: CFG.lev, feed: feedName, eco: CFG.eco,
     calendar: { active: calendarBlock(), next: nextEvent() && { at: new Date(nextEvent().t).toISOString(), title: nextEvent().title }, loaded: cal.ok, ageMin: cal.fetchedAt ? Math.round((Date.now() - cal.fetchedAt) / 60000) : null },
-    fng: mkt.fng, counters: P.counters,
+    fng: mkt.fng, counters: P.counters, readiness: readiness(),
     symbols: CFG.symbols.map((s) => { const c = C[s], a = c.acct; return {
       symbol: s, price: c.q.bid != null ? (c.q.bid + c.q.ask) / 2 : null, dataAgeSec: c.q.t ? Math.round((Date.now() - c.q.t) / 1000) : null,
       equity: E.equity(a), trades: a.trades, funding: c.funding ?? null, bars: c.closes.length,
@@ -826,7 +853,7 @@ if (CFG.port > 0 && !args['telegram-setup']) {
         '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tr><th>Sembol</th><th>Fiyat</th><th>Alt hesap</th><th>Pozisyon</th><th>Model</th></tr>' +
         s.symbols.map((x) => '<tr><td>' + esc(short(x.symbol)) + '</td><td>' + (x.price ? esc(E.num(x.price, 2)) : '–') + '</td><td>' + esc(money(x.equity)) + '</td><td>' +
           (x.position ? esc(x.position.side + ' · stop ' + E.num(x.position.stop, 2)) : '–') + '</td><td style="text-align:left">' + esc(x.model || 'öğreniyor…') + (x.lastVeto ? '<br><small style="color:#f2b84b">' + esc(x.lastVeto) + '</small>' : '') + '</td></tr>').join('') +
-        '</table></div><h2 style="font-size:13px;color:#8a9aa1">SON OLAYLAR</h2><pre style="white-space:pre-wrap;background:#151c20;padding:10px;border-radius:8px;font-size:12px">' + esc(s.recent.slice().reverse().join('\n')) + '</pre>' +
+        '</table></div><h2 style="font-size:13px;color:#8a9aa1">GERÇEK İŞLEM KİLİDİ</h2>' + readinessHtml(s.readiness) + '<h2 style="font-size:13px;color:#8a9aa1">SON OLAYLAR</h2><pre style="white-space:pre-wrap;background:#151c20;padding:10px;border-radius:8px;font-size:12px">' + esc(s.recent.slice().reverse().join('\n')) + '</pre>' +
         '<p>Raporlar: <a href="/rapor-simdi">son 7 gün (şimdi)</a>' + reports.map((f) => ' · <a href="/raporlar/' + f + '">' + esc(f.replace('metyu-rapor-', '').replace('.html', '')) + '</a>').join('') + '</p>' +
         '<p style="color:#8a9aa1">Sayfa ' + (CFG.eco ? 60 : 10) + ' sn\'de bir yenilenir. Ham veri: <a href="/json">/json</a></p></body></html>');
     } catch (e) { res.writeHead(500); res.end('hata: ' + e.message); }
