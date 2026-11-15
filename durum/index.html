@@ -42,6 +42,8 @@ function ciz(d) {
     '<div class="kv"><small>Maks. düşüş</small><b>' + yuzde(p.maxDD) + '</b></div></div>' +
     (p.halt ? '<p class="dn" style="margin:10px 0 0">Durdu: ' + esc(p.halt) + '</p>' : '') +
     (d.counters && d.counters.errors ? '<p class="dn" style="margin:10px 0 0">Hata sayısı: ' + esc(d.counters.errors) + '</p>' : '') + '</div>';
+  if (d.readiness) h += '<div class="card" style="margin-top:14px"><h2>Gerçek işlem kilidi</h2><p style="margin:0 0 8px"><b>' + esc(d.readiness.met) + ' / ' + esc(d.readiness.total) + ' koşul</b> · gerçek emirler kilitli (emir kodu yok)</p>' +
+    d.readiness.items.map((x) => '<p style="margin:4px 0">' + (x.ok ? '✅ ' : '⬜ ') + esc(x.text) + '<br><small>' + esc(x.val) + '</small></p>').join('') + '</div>';
   h += '<div class="card" style="margin-top:14px"><h2>Semboller</h2>' + d.symbols.map((s) => {
     const po = s.position;
     return '<div class="sym"><div class="row"><b>' + esc(s.symbol) + '</b><span>' + para(s.price) + '</span></div>' +

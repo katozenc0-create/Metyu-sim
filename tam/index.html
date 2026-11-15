@@ -294,7 +294,7 @@ function record(a, p, exit, pnl, reason, slOut) {
   if (!a.history) a.history = [];
   if (a.history.length >= 5000) a.history.splice(0, 1000);
   a.history.push({ side: p.side, tOpen: p.tOpen || null, tClose: clockOf(a), entry: p.entry, exit: exit, stop: p.stop,
-    qty: p.qty0 || p.qty, lev: p.lev, costs: p.costs0 != null ? p.costs0 : p.costs, funding: p.funding || 0, pnl: pnl, reason: reason, src: p.src || '',
+    qty: p.qty0 || p.qty, lev: p.lev, costs: p.costs0 != null ? p.costs0 : p.costs, funding: p.funding || 0, pnl: pnl, r0: p.r0 || null, reason: reason, src: p.src || '',
     slipIn: p.slipIn || 0, slipOut: slOut || 0, strat: p.strat || '', partial: !!p.tpDone });
 }
 function unreal(a) {
@@ -358,7 +358,7 @@ function openPos(a, side, entry, stop, lev, pm) {
   if (margin + costs > a.cash) { qty *= a.cash / (margin + costs); sl = slipFor(a, side === 'long' ? 'buy' : 'sell', qty, entry); margin = qty * entry / lev; costs = qty * entry * (a.fee + sl); }
   if (!(qty > 0)) throw new Error('Sanal bakiye yetersiz');
   a.cash -= margin + costs;
-  a.pos = { side: side, qty: qty, entry: entry, stop: stop, lev: lev, margin: margin, liq: liq, costs: costs, slipIn: sl, funding: 0, fundT: clockOf(a), tOpen: clockOf(a),
+  a.pos = { side: side, qty: qty, entry: entry, stop: stop, r0: qty * Math.abs(entry - stop), lev: lev, margin: margin, liq: liq, costs: costs, slipIn: sl, funding: 0, fundT: clockOf(a), tOpen: clockOf(a),
     pm: pm || null, r0: Math.abs(entry - stop), best: entry, stop0: stop, partialPnl: 0, qty0: qty, costs0: costs };
   a.last = entry;
   a.trades++;
