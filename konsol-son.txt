@@ -1,0 +1,7 @@
+[21.11.2026 12:10:42] Önceki portföy yüklendi
+[21.11.2026 12:10:42] metyu runner başladı · BTCUSDT, ETHUSDT, SOLUSDT · 4h bar · 3x · işlem başına portföyün %1'i · sanal para
+[21.11.2026 12:10:42] Durum sayfası: http://127.0.0.1:8787
+[21.11.2026 12:10:42] [ETH] Geçmişten 399 bar yüklendi (Hyperliquid)
+[21.11.2026 12:10:42] [BTC] Geçmişten 399 bar yüklendi (Hyperliquid)
+[21.11.2026 12:10:42] [SOL] Geçmişten 399 bar yüklendi (Hyperliquid)
+[21.11.2026 12:10:46] Fiyat kaynağı: Hyperliquid
